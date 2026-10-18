@@ -1,6 +1,6 @@
 {
   "name": "rackboard",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Rackboard - a self-hosted Kanban board with lists, sublists and themes.",
   "type": "module",
   "private": true,
