@@ -8,6 +8,7 @@ import { assertBoard, boardRole, boardUsers, VISIBLE_BOARDS_SQL, visibleParams, 
 import { sharingRouter } from './sharing.js';
 import { datedEvents, toEvent, buildIcs } from './dates.js';
 import { calendarRouter, feedRouter, scheduleGoogleSync } from './calendar.js';
+import { emailRouter } from './email.js';
 
 export const api = express.Router();
 // The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
@@ -37,6 +38,7 @@ api.use((req, res, next) => {
 });
 api.use(sharingRouter);
 api.use(calendarRouter);
+api.use(emailRouter);
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }

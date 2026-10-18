@@ -152,6 +152,12 @@ To turn on Google sync, an admin creates an OAuth client in Google Cloud:
 
 Event times use the server's time zone (`TZ`). `npm run smoke:google` runs the whole connect-and-sync flow against a built-in mock of Google's APIs.
 
+## Email
+
+**✉ Email** at the top of any card sends a formatted copy to one or more addresses. You can add a note and choose people from the board. The email includes the description, labels, members, checklists, a calendar file (`.ics`) for the card's dates, a link back to the card (when `PUBLIC_URL` is set), and optionally the card's attachments (up to `EMAIL_ATTACHMENT_MB`, default 10). Replies go to the sender's profile email, and the card's activity records who it went to.
+
+An admin sets up the mail server in **Settings → Email**, or with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` and `SMTP_SECURE`. **Send test** checks the settings. For Gmail, use `smtp.gmail.com`, port 587 and an app password. `npm run smoke:email` checks the whole flow against a built-in mock mail server.
+
 ## Mobile
 
 ### Install from the browser (PWA)

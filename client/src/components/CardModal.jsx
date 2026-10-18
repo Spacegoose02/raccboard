@@ -7,6 +7,7 @@ import { dueStatus, formatDate, timeAgo } from '../dates.js';
 import { ColorPicker, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
 import { useAuth, userById } from '../auth.js';
 import { Avatar } from './Avatar.jsx';
+import EmailCard from './EmailCard.jsx';
 
 const mdComponents = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" /> };
 const Markdown = ({ children }) => <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{children}</ReactMarkdown></div>;
@@ -62,6 +63,7 @@ export default function CardModal({ cardId, labels, people = [], onChanged, onCl
         <div className="modal-top">
           <span className="list-pill">{card.list_name}</span>
           <div className="spacer" />
+          <EmailCard card={card} people={people} attachmentCount={attachments.length} onSent={load} />
           {canEdit && <Menu items={[
             { label: 'Archive card', onClick: async () => { await patchCard({ archived: true }); onClose(); } },
             { label: 'Delete card', danger: true, onClick: async () => { if (confirm('Delete this card permanently?')) { await api.del(`/cards/${card.id}`); onChanged(); onClose(); } } },
