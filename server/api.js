@@ -98,7 +98,13 @@ api.get('/boards/:id', (req, res) => {
       (SELECT COUNT(*) FROM attachments WHERE card_id = c.id) AS attachment_count,
       (SELECT COUNT(*) FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id WHERE cl.card_id = c.id) AS check_total,
       (SELECT COUNT(*) FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id WHERE cl.card_id = c.id AND i.done = 1) AS check_done,
-      (SELECT json_group_array(label_id) FROM card_labels WHERE card_id = c.id) AS label_ids
+      (SELECT json_group_array(label_id) FROM card_labels WHERE card_id = c.id) AS label_ids,
+      (SELECT MIN(d) FROM (
+        SELECT i.due_date AS d FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id
+          WHERE cl.card_id = c.id AND i.done = 0 AND i.due_date IS NOT NULL
+        UNION ALL
+        SELECT cl.due_date FROM checklists cl WHERE cl.card_id = c.id AND cl.due_date IS NOT NULL
+          AND EXISTS (SELECT 1 FROM checklist_items i WHERE i.checklist_id = cl.id AND i.done = 0))) AS next_sub_due
     FROM cards c JOIN lists l ON l.id = c.list_id
     WHERE l.board_id = ? AND l.archived = 0 AND c.archived = 0
     ORDER BY c.position`).all(board.id)
@@ -169,6 +175,14 @@ api.patch('/lists/:id', (req, res) => {
     logActivity(list.board_id, null, req.actor, `${req.body.archived ? 'archived' : 'restored'} list "${list.name}"`);
   }
   res.json(getList(list.id));
+});
+
+// Archive every card in a list (the list itself stays).
+api.post('/lists/:id/archive-cards', (req, res) => {
+  const list = getList(req.params.id);
+  const r = db.prepare('UPDATE cards SET archived = 1, updated_at = ? WHERE list_id = ? AND archived = 0').run(now(), list.id);
+  if (r.changes) logActivity(list.board_id, null, req.actor, `archived ${r.changes} card${r.changes === 1 ? '' : 's'} in "${list.name}"`);
+  res.json({ archived: r.changes });
 });
 
 api.delete('/lists/:id', (req, res) => {
@@ -300,15 +314,18 @@ api.post('/cards/:id/checklists', (req, res) => {
   const card = getCard(req.params.id);
   const id = uuid();
   const title = str(req.body.title, 200) || 'Checklist';
-  db.prepare('INSERT INTO checklists (id, card_id, title, position) VALUES (?, ?, ?, ?)')
-    .run(id, card.id, title, nextPos('checklists', 'card_id', card.id));
+  db.prepare('INSERT INTO checklists (id, card_id, title, position, due_date) VALUES (?, ?, ?, ?, ?)')
+    .run(id, card.id, title, nextPos('checklists', 'card_id', card.id), dateOrNull(req.body.due_date));
   logActivity(card.board_id, card.id, req.actor, `added checklist "${title}"`);
   res.status(201).json({ ...db.prepare('SELECT * FROM checklists WHERE id = ?').get(id), items: [] });
 });
 
 api.patch('/checklists/:id', (req, res) => {
   const cl = getChecklist(req.params.id);
-  patch('checklists', cl.id, req.body, { title: (v) => str(v, 200) || cl.title });
+  patch('checklists', cl.id, req.body, { title: (v) => str(v, 200) || cl.title, due_date: dateOrNull });
+  if ('due_date' in req.body && dateOrNull(req.body.due_date) !== cl.due_date) {
+    logActivity(cl.board_id, cl.card_id, req.actor, req.body.due_date ? `set "${cl.title}" due ${req.body.due_date}` : `removed the due date from "${cl.title}"`);
+  }
   res.json(db.prepare('SELECT * FROM checklists WHERE id = ?').get(cl.id));
 });
 

@@ -54,6 +54,18 @@ const att = await up.json();
 const dl = await fetch(`${base}/attachments/${att.id}`).then((r) => r.text());
 check(dl === 'hello raccoon', 'attachment upload and download');
 
+const cl2 = await call('POST', `/cards/${card2.id}/checklists`, { title: 'Shopping', due_date: '2026-12-24' });
+check(cl2.due_date === '2026-12-24', 'checklist (sublist) created with due date');
+await call('POST', `/checklists/${cl2.id}/items`, { text: 'Rollers' });
+await call('PATCH', `/checklists/${cl2.id}`, { due_date: '2026-12-20' });
+full = await call('GET', `/boards/${board.id}`);
+check(full.cards.find((c) => c.id === card2.id).next_sub_due === '2026-12-20', 'next sublist due date on card face');
+await call('PATCH', `/lists/${todo.id}`, { due_date: '2026-11-30' });
+const archivedCount = await call('POST', `/lists/${doing.id}/archive-cards`);
+full = await call('GET', `/boards/${board.id}`);
+check(archivedCount.archived === 2 && full.cards.length === 0, 'archive all cards in a list');
+check(full.lists.find((l) => l.id === todo.id).due_date === '2026-11-30', 'list due date');
+
 await call('PATCH', `/boards/${board.id}`, { completed: true });
 const boards = await call('GET', '/boards');
 check(boards.find((b) => b.id === board.id).completed_at, 'complete board');

@@ -152,6 +152,11 @@ export default function Board({ boardId, cardId }) {
     await api.patch(`/cards/${card.id}`, { completed: !card.completed });
   };
   const updateList = async (id, patch) => { await api.patch(`/lists/${id}`, patch); load(); };
+  const archiveCards = async (list) => {
+    if (!confirm(`Archive all cards in "${list.name}"? You can restore them from Archived items.`)) return;
+    await api.post(`/lists/${list.id}/archive-cards`);
+    load();
+  };
   const addCard = async (listId, title) => { await api.post(`/lists/${listId}/cards`, { title }); load(); };
   const addList = async (name) => { await api.post(`/boards/${boardId}/lists`, { name }); load(); };
   const renameBoard = async (name) => { await api.patch(`/boards/${boardId}`, { name }); load(); };
@@ -166,6 +171,7 @@ export default function Board({ boardId, cardId }) {
         {board.completed_at && <span className="badge done">Completed {formatDate(board.completed_at.slice(0, 10))}</span>}
         {board.archived ? <span className="badge">Archived</span> : null}
         <div className="spacer" />
+        <a className="btn subtle" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>
         <button className="btn subtle" onClick={() => setShowArchived(true)}>🗃 Archived items</button>
         <button className="btn subtle" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen board' : '✓ Complete board'}</button>
       </div>
@@ -174,7 +180,7 @@ export default function Board({ boardId, cardId }) {
         <div className={`lists ${active ? 'is-dragging' : ''}`}>
           <SortableContext items={listOrder.map((id) => LIST + id)} strategy={horizontalListSortingStrategy}>
             {listOrder.map((id) => listsById[id] && (
-              <ListColumn key={id} list={listsById[id]} cardIds={cols[id] || []} ctx={ctx} onUpdate={updateList} onAddCard={addCard} />
+              <ListColumn key={id} list={listsById[id]} cardIds={cols[id] || []} ctx={ctx} onUpdate={updateList} onAddCard={addCard} onArchiveCards={archiveCards} />
             ))}
           </SortableContext>
           <div className="add-list">
@@ -205,7 +211,7 @@ export default function Board({ boardId, cardId }) {
   );
 }
 
-function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard }) {
+function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: LIST + list.id, data: { type: 'list' } });
   const [datePicker, setDatePicker] = useState(false);
   const style = { transform: CSS.Translate.toString(transform), transition };
@@ -217,6 +223,7 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard }) {
         onClick={() => onUpdate(list.id, { collapsed: false })} title="Expand list">
         <span className="collapsed-count">{cardIds.length}</span>
         <span className="collapsed-name">{list.name}</span>
+        {list.due_date && <span className={`collapsed-due ${due}`} title={`Due ${formatDate(list.due_date)}`}>🕑</span>}
       </div>
     );
   }
@@ -227,10 +234,12 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard }) {
         <InlineEdit value={list.name} onSave={(name) => onUpdate(list.id, { name })} className="list-name" />
         <span className="list-count">{cardIds.length}</span>
         <button className="icon-btn" title="Collapse list" onPointerDown={(e) => e.stopPropagation()} onClick={() => onUpdate(list.id, { collapsed: true })}>⇤</button>
+        <button className="icon-btn" title="Archive list" aria-label="Archive list" onPointerDown={(e) => e.stopPropagation()} onClick={() => onUpdate(list.id, { archived: true })}>🗃</button>
         <Menu items={[
           { label: list.due_date ? 'Change due date' : 'Set due date', onClick: () => setDatePicker(true) },
           { label: 'Collapse list', onClick: () => onUpdate(list.id, { collapsed: true }) },
           { label: 'Archive list', onClick: () => onUpdate(list.id, { archived: true }) },
+          cardIds.length > 0 && { label: 'Archive all cards in this list', onClick: () => onArchiveCards(list) },
         ]} />
       </div>
       {list.due_date && (
@@ -305,6 +314,9 @@ function CardFace({ card, ctx, overlay }) {
         {card.attachment_count > 0 && <span className="badge plain" title="Attachments">📎 {card.attachment_count}</span>}
         {card.check_total > 0 && (
           <span className={`badge ${checkDone ? 'done' : 'plain'}`} title="Checklist items">☑ {card.check_done}/{card.check_total}</span>
+        )}
+        {card.next_sub_due && !card.completed && (
+          <span className={`badge ${dueStatus(card.next_sub_due, false) || 'plain'}`} title="Next checklist due date">☑🕑 {formatDate(card.next_sub_due)}</span>
         )}
       </div>
     </div>

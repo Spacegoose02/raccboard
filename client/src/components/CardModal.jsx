@@ -81,7 +81,7 @@ export default function CardModal({ cardId, labels, onChanged, onClose }) {
               {pop === 'dates' && <DatesPopover card={card} onSave={(b) => { setPop(null); patchCard(b); }} onClose={() => setPop(null)} />}
               {pop === 'checklist' && (
                 <Popover title="Add checklist" onClose={() => setPop(null)}>
-                  <ChecklistForm onAdd={(title) => { setPop(null); run(() => api.post(`/cards/${card.id}/checklists`, { title })); }} />
+                  <ChecklistForm onAdd={(title, due_date) => { setPop(null); run(() => api.post(`/cards/${card.id}/checklists`, { title, due_date })); }} />
                 </Popover>
               )}
             </div>
@@ -278,12 +278,17 @@ function DatesPopover({ card, onSave, onClose }) {
 
 function ChecklistForm({ onAdd }) {
   const [title, setTitle] = useState('Checklist');
+  const [due, setDue] = useState('');
+  const add = () => onAdd(title, due || null);
   return (
     <div className="stack">
       <label className="field">Title
-        <input autoFocus value={title} onFocus={(e) => e.target.select()} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && onAdd(title)} />
+        <input autoFocus value={title} onFocus={(e) => e.target.select()} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
       </label>
-      <button className="btn primary" onClick={() => onAdd(title)}>Add</button>
+      <label className="field">Due date (optional)
+        <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+      </label>
+      <button className="btn primary" onClick={add}>Add</button>
     </div>
   );
 }
@@ -295,15 +300,24 @@ function Checklist({ checklist, run }) {
   const done = checklist.items.filter((i) => i.done).length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   const items = hideDone ? checklist.items.filter((i) => !i.done) : checklist.items;
+  const listDue = dueStatus(checklist.due_date, total > 0 && done === total);
   return (
     <section className="section checklist">
       <div className="section-head">
         <h4>☑ <InlineEdit value={checklist.title} onSave={(title) => run(() => api.patch(`/checklists/${checklist.id}`, { title }))} /></h4>
         <div className="row">
+          {checklist.due_date
+            ? <button className={`badge ${listDue}`} onClick={() => setDateFor('list')} title="Checklist due date">🕑 Due {formatDate(checklist.due_date)}</button>
+            : <button className="icon-btn" onClick={() => setDateFor('list')} title="Set checklist due date" aria-label="Set checklist due date">🕑</button>}
           {done > 0 && <button className="btn" onClick={() => setHideDone((h) => !h)}>{hideDone ? `Show checked items (${done})` : 'Hide checked items'}</button>}
           <button className="btn" onClick={() => confirm(`Delete checklist "${checklist.title}"?`) && run(() => api.del(`/checklists/${checklist.id}`))}>Delete</button>
         </div>
       </div>
+      {dateFor === 'list' && (
+        <Popover title="Checklist due date" onClose={() => setDateFor(null)} className="checklist-pop">
+          <ItemDate value={checklist.due_date} onSave={(v) => { setDateFor(null); run(() => api.patch(`/checklists/${checklist.id}`, { due_date: v })); }} />
+        </Popover>
+      )}
       <div className="progress">
         <span className="pct">{pct}%</span>
         <div className="bar"><div className={`fill ${pct === 100 ? 'complete' : ''}`} style={{ width: `${pct}%` }} /></div>

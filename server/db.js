@@ -101,6 +101,8 @@ const migrations = [
   );
   CREATE INDEX idx_activity_card ON activity(card_id);
   `,
+  // v2: due dates on checklists (sublists)
+  'ALTER TABLE checklists ADD COLUMN due_date TEXT;',
 ];
 
 function migrate() {
