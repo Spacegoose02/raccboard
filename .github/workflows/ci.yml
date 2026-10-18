@@ -22,6 +22,7 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && break; sleep 1; done
       - run: npm run smoke
       - run: npm run smoke:oidc
+      - run: npm run smoke:google
       - name: Server log
         if: always()
         run: cat server.log

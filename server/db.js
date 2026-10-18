@@ -163,6 +163,31 @@ const migrations = [
   );
   CREATE INDEX idx_card_members_user ON card_members(user_id);
   `,
+  // v5: calendar feed tokens and Google Calendar sync
+  `
+  ALTER TABLE users ADD COLUMN ical_token TEXT;
+  CREATE UNIQUE INDEX idx_users_ical ON users(ical_token) WHERE ical_token IS NOT NULL;
+  CREATE TABLE google_accounts (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT,
+    refresh_token TEXT NOT NULL,
+    access_token TEXT,
+    expires_at INTEGER,
+    calendar_id TEXT,
+    calendar_name TEXT,
+    board_ids TEXT NOT NULL DEFAULT '[]',
+    last_sync TEXT,
+    last_error TEXT
+  );
+  CREATE TABLE google_events (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    uid TEXT NOT NULL,
+    calendar_id TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    PRIMARY KEY (user_id, uid)
+  );
+  `,
 ];
 
 function migrate() {

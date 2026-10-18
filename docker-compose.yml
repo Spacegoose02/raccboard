@@ -19,4 +19,7 @@ services:
       # - OIDC_CLIENT_ID=rackboard
       # - OIDC_CLIENT_SECRET=change-me
       # - OIDC_NAME=Authentik
+      # Google Calendar sync (needs PUBLIC_URL with https):
+      # - GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+      # - GOOGLE_CLIENT_SECRET=change-me
     restart: unless-stopped

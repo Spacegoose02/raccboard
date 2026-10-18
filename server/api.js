@@ -6,6 +6,8 @@ import { db, uuid, now, logActivity, DEFAULT_LABELS, UPLOAD_DIR } from './db.js'
 import { authRouter, publicUser, requireUser } from './auth.js';
 import { assertBoard, boardRole, boardUsers, VISIBLE_BOARDS_SQL, visibleParams, withRequest } from './access.js';
 import { sharingRouter } from './sharing.js';
+import { datedEvents, toEvent, buildIcs } from './dates.js';
+import { calendarRouter, feedRouter, scheduleGoogleSync } from './calendar.js';
 
 export const api = express.Router();
 // The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
@@ -23,10 +25,18 @@ api.use(express.json({ limit: '2mb' }));
 api.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Sign-in, profiles and user admin. Everything after requireUser needs a session.
+// The calendar feed is authenticated by its secret URL, not a session.
+api.use(feedRouter);
 api.use(authRouter);
 api.use(requireUser);
 api.use(withRequest);
+// After any successful change, push dates to connected Google calendars (debounced).
+api.use((req, res, next) => {
+  if (req.method !== 'GET') res.on('finish', () => { if (res.statusCode < 400) scheduleGoogleSync(); });
+  next();
+});
 api.use(sharingRouter);
+api.use(calendarRouter);
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -126,59 +136,21 @@ api.get('/boards/:id', (req, res) => {
 
 /* ---------- Dates (calendar) ---------- */
 
-// Everything with a date on the boards you can see (or one board): cards (with their start date),
-// sublists, checklist items and lists. Query: board, from, to (YYYY-MM-DD, inclusive).
+// Everything with a date on the boards you can see (or one board). Query: board, from, to (YYYY-MM-DD).
 api.get('/dates', (req, res) => {
-  const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
-  const from = day(req.query.from) || '0000-01-01';
-  const to = day(req.query.to) || '9999-12-31';
-  let scope = `b.archived = 0 AND ${VISIBLE_BOARDS_SQL}`;
-  const params = visibleParams(req.user);
-  if (req.query.board) {
-    assertBoard(String(req.query.board), 'viewer');
-    scope = 'b.id = ?';
-    params.splice(0, params.length, String(req.query.board));
-  }
-  const live = `l.archived = 0 AND ${scope}`;
-  const inRange = (col) => `substr(${col}, 1, 10) BETWEEN ? AND ?`;
-  const rows = [
-    ...db.prepare(`
-      SELECT 'card' AS type, c.id, c.id AS card_id, c.title, c.due_date AS date, c.start_date, c.completed AS done,
-        l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color,
-        (SELECT json_group_array(label_id) FROM card_labels WHERE card_id = c.id) AS label_ids,
-        (SELECT json_group_array(user_id) FROM card_members WHERE card_id = c.id) AS member_ids
-      FROM cards c JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
-      WHERE c.archived = 0 AND ${live} AND c.due_date IS NOT NULL
-        AND substr(COALESCE(c.start_date, c.due_date), 1, 10) <= ? AND substr(c.due_date, 1, 10) >= ?`)
-      .all(...params, to, from),
-    ...db.prepare(`
-      SELECT 'checklist' AS type, cl.id, c.id AS card_id, cl.title || ' · ' || c.title AS title, cl.due_date AS date,
-        NOT EXISTS (SELECT 1 FROM checklist_items i WHERE i.checklist_id = cl.id AND i.done = 0) AS done,
-        l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color
-      FROM checklists cl JOIN cards c ON c.id = cl.card_id JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
-      WHERE c.archived = 0 AND ${live} AND cl.due_date IS NOT NULL AND ${inRange('cl.due_date')}`)
-      .all(...params, from, to),
-    ...db.prepare(`
-      SELECT 'item' AS type, i.id, c.id AS card_id, i.text || ' · ' || c.title AS title, i.due_date AS date, i.done,
-        l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color
-      FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id JOIN cards c ON c.id = cl.card_id
-      JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
-      WHERE c.archived = 0 AND ${live} AND i.due_date IS NOT NULL AND ${inRange('i.due_date')}`)
-      .all(...params, from, to),
-    ...db.prepare(`
-      SELECT 'list' AS type, l.id, NULL AS card_id, l.name AS title, l.due_date AS date, 0 AS done,
-        l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color
-      FROM lists l JOIN boards b ON b.id = l.board_id
-      WHERE ${live} AND l.due_date IS NOT NULL AND ${inRange('l.due_date')}`)
-      .all(...params, from, to),
-  ].map((r) => ({
-    ...r,
-    done: !!r.done,
-    label_ids: r.label_ids ? JSON.parse(r.label_ids) : [],
-    member_ids: r.member_ids ? JSON.parse(r.member_ids) : [],
-  }));
-  rows.sort((a, b) => a.date.localeCompare(b.date));
-  res.json(rows);
+  const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : undefined);
+  const board = req.query.board ? String(req.query.board) : null;
+  if (board) assertBoard(board, 'viewer');
+  res.json(datedEvents({ user: req.user, boardIds: board ? [board] : undefined, from: day(req.query.from), to: day(req.query.to) }));
+});
+
+// One card's dates (card, sublists, items) as an .ics file for Apple/Outlook/Google.
+api.get('/cards/:id/ics', (req, res) => {
+  const card = getCard(req.params.id);
+  const events = datedEvents({ cardId: card.id }).map(toEvent);
+  res.type('text/calendar; charset=utf-8');
+  res.set('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(card.title.slice(0, 60) || 'card')}.ics`);
+  res.send(buildIcs(events, card.title));
 });
 
 api.get('/boards/:id/archived', (req, res) => {

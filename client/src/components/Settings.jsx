@@ -8,12 +8,14 @@ import { Avatar, RACCOONS, RaccoonFace } from './Avatar.jsx';
 import { ColorPicker, Menu } from './ui.jsx';
 import { loadUsers, setCurrentUser, signOut, useAuth } from '../auth.js';
 import { SharePanel } from './Share.jsx';
+import CalendarSettings from './CalendarSettings.jsx';
 
 // Every setting lives on this one page, grouped into sections.
 const SECTIONS = [
   { id: 'profile', label: 'Profile' },
   { id: 'users', label: 'Users', admin: true },
   { id: 'teams', label: 'Teams & families' },
+  { id: 'calendar', label: 'Calendar' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'boards', label: 'Boards & labels' },
   IS_NATIVE && { id: 'server', label: 'Server' },
@@ -26,6 +28,8 @@ export default function Settings({ boardId }) {
   const refs = useRef({});
   const scrollTo = (id) => refs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   useEffect(() => { if (boardId) setTimeout(() => scrollTo('boards'), 50); }, [boardId]);
+  // Coming back from Google's consent screen.
+  useEffect(() => { if (window.location.hash.includes('google=')) setTimeout(() => scrollTo('calendar'), 50); }, []);
   const section = (id) => (el) => { refs.current[id] = el; };
 
   return (
@@ -39,6 +43,7 @@ export default function Settings({ boardId }) {
           <section className="panel" ref={section('profile')}><ProfileSettings /></section>
           {user?.role === 'admin' && <section className="panel" ref={section('users')}><UsersSettings /></section>}
           <section className="panel" ref={section('teams')}><TeamsSettings /></section>
+          <section className="panel" ref={section('calendar')}><CalendarSettings /></section>
           <section className="panel" ref={section('appearance')}><ThemeSettings /></section>
           <section className="panel" ref={section('boards')}><BoardSettings initialBoardId={boardId} /></section>
           {IS_NATIVE && (

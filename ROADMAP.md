@@ -27,6 +27,7 @@
 - [x] Card members: add people to cards, Join button, avatars on card faces, filter the board by member or "My cards"
 - [x] List view: sortable table of a board's cards with search and hide-completed (stacked rows on phones)
 - [x] Calendar view per board and across all boards: cards (with start dates), sublists, checklist items and lists; drag to reschedule; day agenda on phones
+- [x] Send dates to Google Calendar: "Add to calendar" on cards (Google link or .ics), a private calendar feed for any calendar app, and one-way Google Calendar sync for chosen boards
 
 ## Phase 2: Accounts and sharing
 
@@ -34,7 +35,7 @@
 
 ## Phase 3: Views and dates
 
-- [ ] Google Calendar sync (one-way first, then two-way)
+- [ ] Two-way Google Calendar sync (edits in Google flow back to cards)
 - [ ] Due dates on lists and sublists everywhere, including roll-ups on card faces and boards
 - [ ] Reminders and notifications
 
