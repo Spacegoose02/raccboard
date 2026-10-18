@@ -31,6 +31,14 @@
 - [x] Mobile polish: list tabs to jump between lists on phones, compact board header with a ⋯ menu, boards refresh when the app returns to the foreground (and every 30s), offline banner, a small vibration when a drag starts, lazy-loaded views (first download about 40% smaller)
 - [x] Send dates to Google Calendar: "Add to calendar" on cards (Google link or .ics), a private calendar feed for any calendar app, and one-way Google Calendar sync for chosen boards
 
+## v1.1.0 (released 2026-10-18)
+
+- [x] Renamed to **Raccboard** (repo, Docker image and data file names unchanged)
+- [x] Proper password dialog for admin resets (fixes phone keyboards saving a capital letter or trailing space)
+- [x] Change usernames: your own in Profile, anyone's as an admin
+- [x] Recovery CLI: list-users, reset-password, rename-user, make-admin
+- [x] Docker images on GHCR (amd64 + arm64), Unraid PUID/PGID and template
+
 ## Phase 2: Accounts and sharing
 
 - [ ] @mentions in comments
