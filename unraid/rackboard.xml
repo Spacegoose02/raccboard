@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>rackboard</Name>
+  <Repository>ghcr.io/spacegoose02/rackboard:latest</Repository>
+  <Registry>https://github.com/Spacegoose02/rackboard/pkgs/container/rackboard</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Spacegoose02/rackboard/issues</Support>
+  <Project>https://github.com/Spacegoose02/rackboard</Project>
+  <Overview>Rackboard: a self-hosted Kanban board with lists, checklists (sublists), sharing with family, calendar and list views, Google Calendar sync, email, themes and an Android app. Open the WebUI and create the first (admin) account.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Spacegoose02/rackboard/main/unraid/rackboard.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Spacegoose02/rackboard/main/client/public/icons/icon-512.png</Icon>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <Config Name="WebUI port" Target="3000" Default="3000" Mode="tcp" Description="Port for the web interface and API." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/rackboard" Mode="rw" Description="Database and uploaded files. Back this folder up." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/rackboard</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID that owns the data folder (Unraid: 99 = nobody)." Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID that owns the data folder (Unraid: 100 = users)." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="TZ" Target="TZ" Default="America/New_York" Mode="" Description="Time zone, used for calendar events." Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+  <Config Name="PUBLIC_URL" Target="PUBLIC_URL" Default="" Mode="" Description="Public address, e.g. https://kanban.example.com. Used for links in emails, the calendar feed, OIDC and Google sign-in." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="TRUST_PROXY" Target="TRUST_PROXY" Default="" Mode="" Description="Set to true when behind a reverse proxy (Nginx Proxy Manager, SWAG, Traefik)." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="ALLOW_SIGNUP" Target="ALLOW_SIGNUP" Default="false" Mode="" Description="Let anyone create an account from the sign-in page." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="OIDC_ISSUER" Target="OIDC_ISSUER" Default="" Mode="" Description="Single sign-on issuer URL (Authentik, Authelia, Keycloak, Google…). Leave empty to use local accounts only." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="OIDC_CLIENT_ID" Target="OIDC_CLIENT_ID" Default="" Mode="" Description="Single sign-on client ID." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="OIDC_CLIENT_SECRET" Target="OIDC_CLIENT_SECRET" Default="" Mode="" Description="Single sign-on client secret." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="OIDC_NAME" Target="OIDC_NAME" Default="" Mode="" Description="Label for the sign-in button, e.g. Authentik." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="GOOGLE_CLIENT_ID" Target="GOOGLE_CLIENT_ID" Default="" Mode="" Description="Google Calendar sync: OAuth client ID (needs PUBLIC_URL with https)." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="GOOGLE_CLIENT_SECRET" Target="GOOGLE_CLIENT_SECRET" Default="" Mode="" Description="Google Calendar sync: OAuth client secret." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="MAX_UPLOAD_MB" Target="MAX_UPLOAD_MB" Default="25" Mode="" Description="Largest attachment allowed, in MB." Type="Variable" Display="advanced" Required="false" Mask="false">25</Config>
+</Container>

@@ -1,7 +1,8 @@
 services:
   rackboard:
+    image: ghcr.io/spacegoose02/rackboard:latest
+    # Or build from this checkout: docker compose up -d --build
     build: .
-    image: rackboard:latest
     container_name: rackboard
     ports:
       - "3000:3000"
@@ -9,6 +10,9 @@ services:
       - ./data:/data
     environment:
       - TZ=America/New_York
+      # Owner of ./data inside the container (Unraid default 99:100; use your own id elsewhere)
+      - PUID=1000
+      - PGID=1000
       # - MAX_UPLOAD_MB=25
       # - ALLOW_SIGNUP=false
       # Behind a reverse proxy with HTTPS:

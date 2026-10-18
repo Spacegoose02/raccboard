@@ -48,7 +48,8 @@
 - [ ] More themes and a custom theme editor
 - [ ] Raccoon branding: logo, empty states, illustrations
 - [ ] Windows .exe via a packaged Node binary (Node SEA or pkg) with a tray icon
-- [ ] GitHub releases plus Docker image publishing (GHCR / Docker Hub, multi-arch)
+- [x] GitHub releases plus Docker image publishing (GHCR, amd64 + arm64) and an Unraid template
+- [ ] Docker Hub mirror and Unraid Community Applications listing
 - [ ] Signed release APK (keystore in CI secrets), then Play Store / F-Droid listing
 - [ ] Offline edits in the app with sync when the server is reachable
 - [ ] Import from Trello JSON
