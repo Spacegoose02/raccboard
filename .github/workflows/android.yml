@@ -18,7 +18,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      # ubuntu-latest already ships the Android SDK (ANDROID_HOME is set).
       - run: npm ci
       - run: chmod +x android/gradlew
       - run: npm run android:apk
