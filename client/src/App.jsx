@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { APP_MASCOT, APP_NAME, IS_NATIVE } from './config.js';
 import { updateSettings, useSettings } from './settings.js';
 import { refreshAuth, signOut, useAuth } from './auth.js';
 import Home from './components/Home.jsx';
 import Board from './components/Board.jsx';
-import Settings from './components/Settings.jsx';
+const Settings = lazy(() => import('./components/Settings.jsx'));
 import ServerSetup from './components/ServerSetup.jsx';
 import SignIn from './components/SignIn.jsx';
-import CalendarView from './components/CalendarView.jsx';
+const CalendarView = lazy(() => import('./components/CalendarView.jsx'));
 import { Avatar } from './components/Avatar.jsx';
 import { Menu } from './components/ui.jsx';
 
@@ -25,6 +25,16 @@ export default function App() {
   const { serverUrl } = useSettings();
   const auth = useAuth();
   const needsServer = IS_NATIVE && !serverUrl;
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine === false);
+  useEffect(() => {
+    const down = () => setOffline(true);
+    const up = () => setOffline(false);
+    window.addEventListener('offline', down);
+    window.addEventListener('online', up);
+    window.addEventListener('rb:offline', down);
+    window.addEventListener('rb:online', up);
+    return () => ['offline', 'online', 'rb:offline', 'rb:online'].forEach((ev, i) => window.removeEventListener(ev, [down, up, down, up][i]));
+  }, []);
 
   useEffect(() => {
     const onHash = () => setRoute(parse(window.location.hash));
@@ -54,12 +64,12 @@ export default function App() {
   } else if (!auth.user) content = <SignIn key={auth.setupRequired ? 'setup' : 'login'} />;
   else {
     content = (
-      <>
+      <Suspense fallback={<div className="page"><p className="muted">Loading…</p></div>}>
         {route.page === 'home' && <Home />}
         {route.page === 'calendar' && <div className="page wide"><h2>Calendar</h2><p className="muted small">Everything with a date on every board you can open.</p><CalendarView /></div>}
         {route.page === 'settings' && <Settings key={route.boardId || ''} boardId={route.boardId} />}
         {route.page === 'board' && <Board key={route.boardId} boardId={route.boardId} cardId={route.cardId} />}
-      </>
+      </Suspense>
     );
   }
 
@@ -84,6 +94,7 @@ export default function App() {
           </nav>
         )}
       </header>
+      {offline && <div className="offline-banner" role="status">You're offline. Changes can't be saved until the connection is back.</div>}
       <main className="main">{content}</main>
     </div>
   );

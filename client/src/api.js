@@ -21,11 +21,18 @@ function headers(extra = {}) {
 
 async function request(method, path, body) {
   const isForm = body instanceof FormData;
-  const res = await fetch(`${base()}/api${path}`, {
-    method,
-    headers: headers(body && !isForm ? { 'Content-Type': 'application/json' } : {}),
-    body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${base()}/api${path}`, {
+      method,
+      headers: headers(body && !isForm ? { 'Content-Type': 'application/json' } : {}),
+      body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
+    });
+  } catch {
+    window.dispatchEvent(new Event('rb:offline')); // network error: server unreachable
+    throw new Error("Can't reach the server. Check your connection.");
+  }
+  window.dispatchEvent(new Event('rb:online'));
   if (res.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event('rb:signed-out'));
   if (!res.ok) {
     let msg = res.statusText;
