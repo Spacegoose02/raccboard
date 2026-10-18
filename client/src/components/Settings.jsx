@@ -9,6 +9,7 @@ import { ColorPicker, Menu } from './ui.jsx';
 import { loadUsers, setCurrentUser, signOut, useAuth } from '../auth.js';
 import { SharePanel } from './Share.jsx';
 import CalendarSettings from './CalendarSettings.jsx';
+import EmailSettings from './EmailSettings.jsx';
 
 // Every setting lives on this one page, grouped into sections.
 const SECTIONS = [
@@ -16,6 +17,7 @@ const SECTIONS = [
   { id: 'users', label: 'Users', admin: true },
   { id: 'teams', label: 'Teams & families' },
   { id: 'calendar', label: 'Calendar' },
+  { id: 'email', label: 'Email', admin: true },
   { id: 'appearance', label: 'Appearance' },
   { id: 'boards', label: 'Boards & labels' },
   IS_NATIVE && { id: 'server', label: 'Server' },
@@ -44,6 +46,7 @@ export default function Settings({ boardId }) {
           {user?.role === 'admin' && <section className="panel" ref={section('users')}><UsersSettings /></section>}
           <section className="panel" ref={section('teams')}><TeamsSettings /></section>
           <section className="panel" ref={section('calendar')}><CalendarSettings /></section>
+          {user?.role === 'admin' && <section className="panel" ref={section('email')}><EmailSettings /></section>}
           <section className="panel" ref={section('appearance')}><ThemeSettings /></section>
           <section className="panel" ref={section('boards')}><BoardSettings initialBoardId={boardId} /></section>
           {IS_NATIVE && (

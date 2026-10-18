@@ -188,6 +188,13 @@ const migrations = [
     PRIMARY KEY (user_id, uid)
   );
   `,
+  // v6: server-wide settings (email/SMTP)
+  `
+  CREATE TABLE app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+  `,
 ];
 
 function migrate() {

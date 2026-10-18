@@ -27,6 +27,7 @@
 - [x] Card members: add people to cards, Join button, avatars on card faces, filter the board by member or "My cards"
 - [x] List view: sortable table of a board's cards with search and hide-completed (stacked rows on phones)
 - [x] Calendar view per board and across all boards: cards (with start dates), sublists, checklist items and lists; drag to reschedule; day agenda on phones
+- [x] Send a card by email: formatted HTML email with checklists, a calendar file for its dates and optional attachments; SMTP settings in Settings → Email
 - [x] Send dates to Google Calendar: "Add to calendar" on cards (Google link or .ics), a private calendar feed for any calendar app, and one-way Google Calendar sync for chosen boards
 
 ## Phase 2: Accounts and sharing
@@ -42,7 +43,7 @@
 ## Phase 4: Extras
 
 - [ ] **Homeboard**: a board template for house projects (rooms as lists, projects as cards, materials as checklists)
-- [ ] Send a card by email (and create cards from email)
+- [ ] Create cards from email (inbound address per board)
 - [ ] More themes and a custom theme editor
 - [ ] Raccoon branding: logo, empty states, illustrations
 - [ ] Windows .exe via a packaged Node binary (Node SEA or pkg) with a tray icon

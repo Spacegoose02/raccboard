@@ -686,3 +686,10 @@ img.avatar { object-fit: cover; }
 .small-btn { font-size: 12px; padding: 4px 8px; }
 .popover a.btn.wide { display: flex; justify-content: center; margin-top: 0; }
 @media (max-width: 600px) { .feed-row { flex-wrap: wrap; } }
+
+/* Email */
+.email-card { position: relative; }
+.email-card .popover { left: auto; right: 0; width: 340px; }
+.email-card .chips .chip { padding-left: 10px; }
+.test-to { max-width: 260px; }
+@media (max-width: 600px) { .email-card .popover { width: auto; } }

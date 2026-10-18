@@ -19,6 +19,12 @@ services:
       # - OIDC_CLIENT_ID=rackboard
       # - OIDC_CLIENT_SECRET=change-me
       # - OIDC_NAME=Authentik
+      # Email (or set it up in Settings -> Email):
+      # - SMTP_HOST=smtp.gmail.com
+      # - SMTP_PORT=587
+      # - SMTP_USER=you@gmail.com
+      # - SMTP_PASS=your-app-password
+      # - SMTP_FROM=Rackboard <you@gmail.com>
       # Google Calendar sync (needs PUBLIC_URL with https):
       # - GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
       # - GOOGLE_CLIENT_SECRET=change-me
