@@ -7,12 +7,14 @@ import Board from './components/Board.jsx';
 import Settings from './components/Settings.jsx';
 import ServerSetup from './components/ServerSetup.jsx';
 import SignIn from './components/SignIn.jsx';
+import CalendarView from './components/CalendarView.jsx';
 import { Avatar } from './components/Avatar.jsx';
 import { Menu } from './components/ui.jsx';
 
-// Tiny hash router: #/  ·  #/login  ·  #/settings[/board/:boardId]  ·  #/b/:boardId  ·  #/b/:boardId/c/:cardId
+// Tiny hash router: #/  ·  #/login  ·  #/calendar  ·  #/settings[/board/:boardId]  ·  #/b/:boardId  ·  #/b/:boardId/c/:cardId
 function parse(hash) {
   const parts = hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
+  if (parts[0] === 'calendar') return { page: 'calendar' };
   if (parts[0] === 'settings') return { page: 'settings', boardId: parts[1] === 'board' ? parts[2] : null };
   if (parts[0] === 'b' && parts[1]) return { page: 'board', boardId: parts[1], cardId: parts[2] === 'c' ? parts[3] : null };
   return { page: 'home' };
@@ -35,7 +37,7 @@ export default function App() {
   useEffect(() => { if (!needsServer) refreshAuth(); }, [needsServer, serverUrl]);
 
   useEffect(() => {
-    if (route.page !== 'board') document.title = route.page === 'settings' ? `Settings · ${APP_NAME}` : APP_NAME;
+    if (route.page !== 'board') document.title = route.page === 'settings' ? `Settings · ${APP_NAME}` : route.page === 'calendar' ? `Calendar · ${APP_NAME}` : APP_NAME;
   }, [route.page]);
 
   let content;
@@ -54,6 +56,7 @@ export default function App() {
     content = (
       <>
         {route.page === 'home' && <Home />}
+        {route.page === 'calendar' && <div className="page wide"><h2>Calendar</h2><p className="muted small">Everything with a date on every board you can open.</p><CalendarView /></div>}
         {route.page === 'settings' && <Settings key={route.boardId || ''} boardId={route.boardId} />}
         {route.page === 'board' && <Board key={route.boardId} boardId={route.boardId} cardId={route.cardId} />}
       </>
@@ -67,6 +70,7 @@ export default function App() {
         {auth.user && (
           <nav className="topnav">
             <a href="#/" className={route.page === 'home' ? 'active' : ''}>Boards</a>
+            <a href="#/calendar" className={route.page === 'calendar' ? 'active' : ''} title="Calendar">📅<span className="hide-sm"> Calendar</span></a>
             <a href="#/settings" className={route.page === 'settings' ? 'active' : ''} title="Settings">⚙<span className="hide-sm"> Settings</span></a>
             <Menu
               className="user-menu"

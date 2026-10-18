@@ -39,3 +39,9 @@ export function timeAgo(iso) {
   if (s < 7 * 86400) return `${Math.floor(s / 86400)} d ago`;
   return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
+
+// Local calendar-day helpers ("YYYY-MM-DD").
+export const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const fromYmd = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+export const addDays = (s, n) => { const d = fromYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+export const daysBetween = (a, b) => Math.round((fromYmd(b) - fromYmd(a)) / 864e5);
