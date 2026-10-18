@@ -58,8 +58,13 @@ Open http://localhost:3000. One process serves both the built client and the API
 | `DATA_DIR`      | `./data` | Where the SQLite database and uploads go |
 | `MAX_UPLOAD_MB` | `25`     | Maximum attachment size                  |
 | `CORS_ORIGIN`   | `*`      | Allowed origin for cross-origin API use  |
+| `ALLOW_SIGNUP`  | `false`  | Let anyone create an account from the sign-in page |
+| `TRUST_PROXY`   | (unset)  | Set to `true` behind a reverse proxy so HTTPS is detected (secure cookies) |
+| `PUBLIC_URL`    | (unset)  | Public base URL, e.g. `https://kanban.example.com` (used for the OIDC callback) |
 
-Smoke test against a running server: `npm run smoke` (or `node scripts/smoke.js http://host:port`). It creates a temporary board, exercises the API, and then deletes the board.
+See [Accounts and sign-in](#accounts-and-sign-in) for the `OIDC_*` variables.
+
+Smoke test against a running server: `npm run smoke` (or `node scripts/smoke.js http://host:port`). It creates a temporary board, exercises the API, and then deletes the board. On a fresh server it creates the first admin account (`smoke`). On an existing one, set `SMOKE_USER` and `SMOKE_PASSWORD` to an admin account.
 
 ## Docker
 
@@ -90,6 +95,31 @@ If the appdata folder was created by root and the container cannot write to it, 
 ### Backups
 
 Copy the `data/` folder: it holds `rackboard.db` (plus WAL files) and `uploads/`. For a hot backup, run `sqlite3 rackboard.db ".backup backup.db"`.
+
+## Accounts and sign-in
+
+On first start, Rackboard asks you to create the first account, which becomes the **admin**. Existing boards from before accounts are kept. Admins add everyone else in **Settings → Users**, or turn on `ALLOW_SIGNUP=true` so people can sign up themselves.
+
+Everyone has a profile with a display name, email, and avatar: one of 12 raccoons, an uploaded photo, or initials. Comments and activity show who did what. Passwords are hashed with scrypt. Sessions last 30 days and renew with use. In the browser the session is an HttpOnly cookie; the Android app uses a bearer token. Changing your password signs out your other devices.
+
+### Single sign-on (OIDC)
+
+Works with Authentik, Authelia, Keycloak, Google, Microsoft and any other OpenID Connect provider. Create a confidential client with the redirect URI `https://<your-rackboard>/api/auth/oidc/callback`, then set:
+
+| Variable             | Purpose |
+| -------------------- | ------- |
+| `OIDC_ISSUER`        | Issuer URL, e.g. `https://auth.example.com/application/o/rackboard/` |
+| `OIDC_CLIENT_ID`     | Client ID |
+| `OIDC_CLIENT_SECRET` | Client secret (leave empty for a public PKCE client) |
+| `OIDC_NAME`          | Button label, e.g. `Authentik` (default "Single sign-on") |
+| `OIDC_REDIRECT_URI`  | Override the callback URL (default `PUBLIC_URL` + `/api/auth/oidc/callback`, or the request's host) |
+| `OIDC_SCOPES`        | Default `openid profile email` |
+| `OIDC_AUTO_CREATE`   | `true` (default): first sign-in creates an account. `false`: only already-linked accounts can sign in |
+| `OIDC_LINK_BY_EMAIL` | `true` (default): link to an existing local account that has the same **verified** email |
+
+OIDC sign-in uses the browser (web and PWA). To use the Android app with an SSO account, set a password in **Settings → Profile** and sign in with that.
+
+`npm run smoke:oidc` runs the whole OIDC flow against a built-in mock identity provider.
 
 ## Mobile
 

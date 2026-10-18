@@ -545,3 +545,24 @@ textarea.modal-title { min-height: 40px; }
 .board-settings .swatches { max-width: 340px; }
 .board-settings .swatch { height: 24px; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* Accounts */
+.avatar.raccoon { background: none; overflow: hidden; }
+.avatar.raccoon svg { display: block; }
+img.avatar { object-fit: cover; }
+.user-menu > .icon-btn { padding: 0; border-radius: 50%; }
+.profile-head { display: flex; align-items: center; gap: 12px; margin: 8px 0 4px; }
+.profile-name { font-size: 18px; font-weight: 700; color: var(--text-strong); }
+.settings-body h4 { margin: 14px 0 8px; }
+.avatar-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.avatar-choice { width: 56px; height: 56px; border-radius: 50%; border: 3px solid transparent; background: var(--btn-bg); padding: 1px; display: inline-flex; align-items: center; justify-content: center; }
+.avatar-choice svg { border-radius: 50%; }
+.avatar-choice.text { width: auto; border-radius: 28px; padding: 0 14px; font-size: 13px; }
+.avatar-choice.selected { border-color: var(--accent); }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.user-list { display: flex; flex-direction: column; }
+.user-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.btn.sso { text-align: center; justify-content: center; }
+@media (max-width: 600px) { .hide-sm { display: none; } }

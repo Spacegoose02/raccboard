@@ -1,6 +1,10 @@
 // API smoke test: node scripts/smoke.js [baseUrl]
+// On a fresh server it creates the first (admin) account. On an existing one it signs in with
+// SMOKE_USER / SMOKE_PASSWORD, which must be an admin.
 const base = (process.argv[2] || process.env.BASE_URL || 'http://localhost:3000') + '/api';
-const headers = { 'Content-Type': 'application/json', 'X-User': 'Smoke Test' };
+const SMOKE_USER = process.env.SMOKE_USER || 'smoke';
+const SMOKE_PASSWORD = process.env.SMOKE_PASSWORD || 'smoke-test-password';
+const headers = { 'Content-Type': 'application/json' };
 
 async function call(method, path, body) {
   const res = await fetch(base + path, { method, headers, body: body && JSON.stringify(body) });
@@ -12,6 +16,21 @@ const check = (cond, msg) => { if (!cond) throw new Error('FAILED: ' + msg); con
 
 const health = await call('GET', '/health');
 check(health.ok, 'health');
+
+const anon = await fetch(base + '/boards');
+check(anon.status === 401, 'API requires sign-in');
+const status = await call('GET', '/auth/status');
+const session = status.setupRequired
+  ? await call('POST', '/auth/setup', { username: SMOKE_USER, password: SMOKE_PASSWORD, display_name: 'Smoke Test' })
+  : await call('POST', '/auth/login', { username: SMOKE_USER, password: SMOKE_PASSWORD });
+headers.Authorization = `Bearer ${session.token}`;
+check(session.user.role === 'admin', status.setupRequired ? 'first account created as admin' : 'signed in');
+const bad = await fetch(base + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: SMOKE_USER, password: 'wrong-password' }) });
+check(bad.status === 401, 'wrong password rejected');
+const me = await call('PATCH', '/auth/me', { display_name: 'Smoke Test', avatar: 'raccoon:3' });
+check(me.avatar === 'raccoon:3' && me.display_name === 'Smoke Test', 'profile and raccoon avatar saved');
+const extra = await call('POST', '/users', { username: `smoke-${Date.now()}`, password: 'another-password', display_name: 'Extra' });
+check((await call('GET', '/users')).some((u) => u.id === extra.id), 'admin creates a user');
 
 const board = await call('POST', '/boards', { name: 'Smoke board' });
 check(board.id, 'create board');
@@ -45,13 +64,14 @@ check(face.comment_count === 1 && face.label_ids.includes(label.id), 'comment co
 const detail = await call('GET', `/cards/${card.id}`);
 check(detail.checklists[0].items.length === 2, 'card detail has checklist items');
 check(detail.activity.some((a) => a.text.startsWith('moved this card')), 'activity log records move');
-check(detail.activity.every((a) => a.actor === 'Smoke Test'), 'actor taken from X-User');
+check(detail.activity.every((a) => a.actor === 'Smoke Test' && a.user_id === session.user.id), 'activity records the signed-in user');
+check(detail.comments[0].user_id === session.user.id, 'comment records the signed-in user');
 
 const form = new FormData();
 form.append('file', new Blob(['hello raccoon']), 'note.txt');
-const up = await fetch(`${base}/cards/${card.id}/attachments`, { method: 'POST', body: form, headers: { 'X-User': 'Smoke Test' } });
+const up = await fetch(`${base}/cards/${card.id}/attachments`, { method: 'POST', body: form, headers: { Authorization: headers.Authorization } });
 const att = await up.json();
-const dl = await fetch(`${base}/attachments/${att.id}`).then((r) => r.text());
+const dl = await fetch(`${base}/attachments/${att.id}?access_token=${session.token}`).then((r) => r.text());
 check(dl === 'hello raccoon', 'attachment upload and download');
 
 const cl2 = await call('POST', `/cards/${card2.id}/checklists`, { title: 'Shopping', due_date: '2026-12-24' });
@@ -71,4 +91,8 @@ const boards = await call('GET', '/boards');
 check(boards.find((b) => b.id === board.id).completed_at, 'complete board');
 
 await call('DELETE', `/boards/${board.id}`);
+await call('DELETE', `/users/${extra.id}`);
+await call('POST', '/auth/logout');
+const after = await fetch(base + '/boards', { headers });
+check(after.status === 401, 'sign-out ends the session');
 console.log('Smoke test passed.');

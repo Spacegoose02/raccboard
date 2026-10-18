@@ -5,8 +5,8 @@ const listeners = new Set();
 let state = load();
 
 function load() {
-  try { return { displayName: '', theme: 'dark', serverUrl: '', ...JSON.parse(localStorage.getItem(KEY) || '{}') }; }
-  catch { return { displayName: '', theme: 'dark', serverUrl: '' }; }
+  try { return { theme: 'dark', serverUrl: '', authToken: '', ...JSON.parse(localStorage.getItem(KEY) || '{}') }; }
+  catch { return { theme: 'dark', serverUrl: '', authToken: '' }; }
 }
 
 export function getSettings() { return state; }

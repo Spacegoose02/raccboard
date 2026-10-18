@@ -5,7 +5,8 @@ import { api, apiUrl } from '../api.js';
 import { COLORS } from '../config.js';
 import { dueStatus, formatDate, timeAgo } from '../dates.js';
 import { ColorPicker, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
-import { useSettings } from '../settings.js';
+import { useAuth, userById } from '../auth.js';
+import { Avatar } from './Avatar.jsx';
 
 const mdComponents = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" /> };
 const Markdown = ({ children }) => <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{children}</ReactMarkdown></div>;
@@ -363,7 +364,7 @@ function ItemDate({ value, onSave }) {
 }
 
 function CommentsAndActivity({ card, comments, activity, run }) {
-  const { displayName } = useSettings();
+  const { user: me } = useAuth();
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
@@ -378,7 +379,6 @@ function CommentsAndActivity({ card, comments, activity, run }) {
     ...comments.map((c) => ({ ...c, kind: 'comment' })),
     ...(showDetails ? activity.map((a) => ({ ...a, kind: 'activity' })) : []),
   ].sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const me = displayName || 'Someone';
 
   return (
     <>
@@ -387,7 +387,7 @@ function CommentsAndActivity({ card, comments, activity, run }) {
         <button className="btn" onClick={() => setShowDetails((s) => !s)}>{showDetails ? 'Hide details' : 'Show details'}</button>
       </div>
       <div className="comment-box">
-        <Avatar name={me} />
+        <Avatar user={me} />
         <div className="grow">
           <textarea placeholder="Write a comment…" rows={focused || text ? 3 : 1} value={text}
             onFocus={() => setFocused(true)} onChange={(e) => setText(e.target.value)}
@@ -398,40 +398,36 @@ function CommentsAndActivity({ card, comments, activity, run }) {
           {(focused || text) && (
             <div className="row">
               <button className="btn primary" disabled={!text.trim()} onClick={submit}>Save</button>
-              {!displayName && <span className="muted hint">Set your name in <a href="#/settings">Settings</a></span>}
             </div>
           )}
         </div>
       </div>
       <ul className="feed">
-        {feed.map((f) => (
+        {feed.map((f) => {
+          const who = userById(f.user_id);
+          const name = who?.display_name || (f.kind === 'comment' ? f.author : f.actor);
+          const canDelete = f.kind === 'comment' && (f.user_id === me?.id || me?.role === 'admin');
+          return (
           <li key={f.id} className={f.kind}>
-            <Avatar name={f.kind === 'comment' ? f.author : f.actor} />
+            <Avatar user={who} name={name} />
             <div className="grow">
               {f.kind === 'comment' ? (
                 <>
-                  <div><b>{f.author}</b> <span className="muted">{timeAgo(f.created_at)}</span></div>
+                  <div><b>{name}</b> <span className="muted">{timeAgo(f.created_at)}</span></div>
                   <div className="comment-body"><Markdown>{f.body}</Markdown></div>
-                  <button className="link-btn small" onClick={() => confirm('Delete this comment?') && run(() => api.del(`/comments/${f.id}`))}>Delete</button>
+                  {canDelete && <button className="link-btn small" onClick={() => confirm('Delete this comment?') && run(() => api.del(`/comments/${f.id}`))}>Delete</button>}
                 </>
               ) : (
                 <>
-                  <div><b>{f.actor}</b> {f.text}</div>
+                  <div><b>{name}</b> {f.text}</div>
                   <div className="muted small">{timeAgo(f.created_at)}</div>
                 </>
               )}
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </>
   );
-}
-
-const AVATAR_COLORS = ['#c2410c', '#0369a1', '#15803d', '#7e22ce', '#b91c1c', '#0f766e', '#a16207', '#4338ca'];
-export function Avatar({ name }) {
-  const initials = (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0].toUpperCase()).join('') || '?';
-  let h = 0;
-  for (const ch of name || '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return <span className="avatar" style={{ background: AVATAR_COLORS[h % AVATAR_COLORS.length] }} title={name}>{initials}</span>;
 }
