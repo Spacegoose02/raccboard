@@ -12,6 +12,8 @@ const dist = path.join(root, 'client', 'dist');
 
 const app = express();
 app.disable('x-powered-by');
+// Behind a reverse proxy (Nginx Proxy Manager, Caddy, Traefik…) set TRUST_PROXY=true so HTTPS is detected.
+if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
 app.use('/api', api);
 
 if (fs.existsSync(dist)) {

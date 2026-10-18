@@ -3,27 +3,26 @@ import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, uuid, now, logActivity, DEFAULT_LABELS, UPLOAD_DIR } from './db.js';
+import { authRouter, requireUser } from './auth.js';
 
 export const api = express.Router();
 // The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
-// CORS_ORIGIN can narrow this; tighten further once accounts land in Phase 2.
+// It authenticates with a Bearer token, never cookies, so a wildcard origin is safe.
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 api.use((req, res, next) => {
   res.set('Access-Control-Allow-Origin', CORS_ORIGIN);
-  res.set('Access-Control-Allow-Headers', 'Content-Type, X-User');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
 api.use(express.json({ limit: '2mb' }));
 
-// Display name from the client (Settings page). Accounts arrive in Phase 2.
-api.use((req, _res, next) => {
-  let name = req.get('X-User') || '';
-  try { name = decodeURIComponent(name); } catch { /* keep raw */ }
-  req.actor = name.trim().slice(0, 60) || 'Someone';
-  next();
-});
+api.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Sign-in, profiles and user admin. Everything after requireUser needs a session.
+api.use(authRouter);
+api.use(requireUser);
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -58,8 +57,6 @@ const touchCard = (id) => db.prepare('UPDATE cards SET updated_at = ? WHERE id =
 const nextPos = (table, col, parent) =>
   (db.prepare(`SELECT MAX(position) AS m FROM ${table} WHERE ${col} = ?`).get(parent).m ?? -1) + 1;
 
-api.get('/health', (_req, res) => res.json({ ok: true }));
-
 /* ---------- Boards ---------- */
 
 api.get('/boards', (_req, res) => {
@@ -81,7 +78,7 @@ api.post('/boards', (req, res) => {
       .run(id, name, str(req.body.color, 32) || null, nextPosAll('boards'), now());
     const ins = db.prepare('INSERT INTO labels (id, board_id, name, color) VALUES (?, ?, ?, ?)');
     for (const l of DEFAULT_LABELS) ins.run(uuid(), id, l.name, l.color);
-    logActivity(id, null, req.actor, `created board "${name}"`);
+    logActivity(id, null, req.who, `created board "${name}"`);
   })();
   res.status(201).json(getBoard(id));
 });
@@ -128,10 +125,10 @@ api.patch('/boards/:id', (req, res) => {
     patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => str(v, 32) || null, archived: bool });
     if ('completed' in b) {
       db.prepare('UPDATE boards SET completed_at = ? WHERE id = ?').run(b.completed ? now() : null, board.id);
-      logActivity(board.id, null, req.actor, b.completed ? 'completed the board' : 'reopened the board');
+      logActivity(board.id, null, req.who, b.completed ? 'completed the board' : 'reopened the board');
     }
     if ('name' in b && str(b.name) && str(b.name) !== board.name) {
-      logActivity(board.id, null, req.actor, `renamed board to "${str(b.name, 120)}"`);
+      logActivity(board.id, null, req.who, `renamed board to "${str(b.name, 120)}"`);
     }
   })();
   res.json(getBoard(board.id));
@@ -154,7 +151,7 @@ api.post('/boards/:id/lists', (req, res) => {
   const name = str(req.body.name, 120) || 'New list';
   db.prepare('INSERT INTO lists (id, board_id, name, position, due_date) VALUES (?, ?, ?, ?, ?)')
     .run(id, board.id, name, nextPos('lists', 'board_id', board.id), dateOrNull(req.body.due_date));
-  logActivity(board.id, null, req.actor, `added list "${name}"`);
+  logActivity(board.id, null, req.who, `added list "${name}"`);
   res.status(201).json(getList(id));
 });
 
@@ -172,7 +169,7 @@ api.patch('/lists/:id', (req, res) => {
     name: (v) => str(v, 120) || list.name, due_date: dateOrNull, collapsed: bool, archived: bool,
   });
   if ('archived' in req.body) {
-    logActivity(list.board_id, null, req.actor, `${req.body.archived ? 'archived' : 'restored'} list "${list.name}"`);
+    logActivity(list.board_id, null, req.who, `${req.body.archived ? 'archived' : 'restored'} list "${list.name}"`);
   }
   res.json(getList(list.id));
 });
@@ -181,7 +178,7 @@ api.patch('/lists/:id', (req, res) => {
 api.post('/lists/:id/archive-cards', (req, res) => {
   const list = getList(req.params.id);
   const r = db.prepare('UPDATE cards SET archived = 1, updated_at = ? WHERE list_id = ? AND archived = 0').run(now(), list.id);
-  if (r.changes) logActivity(list.board_id, null, req.actor, `archived ${r.changes} card${r.changes === 1 ? '' : 's'} in "${list.name}"`);
+  if (r.changes) logActivity(list.board_id, null, req.who, `archived ${r.changes} card${r.changes === 1 ? '' : 's'} in "${list.name}"`);
   res.json({ archived: r.changes });
 });
 
@@ -203,7 +200,7 @@ api.post('/lists/:id/cards', (req, res) => {
   db.transaction(() => {
     db.prepare(`INSERT INTO cards (id, list_id, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .run(id, list.id, title, nextPos('cards', 'list_id', list.id), t, t);
-    logActivity(list.board_id, id, req.actor, `added this card to ${list.name}`);
+    logActivity(list.board_id, id, req.who, `added this card to ${list.name}`);
   })();
   res.status(201).json(getCard(id));
 });
@@ -231,7 +228,7 @@ api.patch('/cards/:id', (req, res) => {
       start_date: dateOrNull, due_date: dateOrNull, completed: bool, archived: bool,
     });
     touchCard(card.id);
-    const log = (t) => logActivity(card.board_id, card.id, req.actor, t);
+    const log = (t) => logActivity(card.board_id, card.id, req.who, t);
     if ('completed' in b && bool(b.completed) !== card.completed) log(b.completed ? 'marked this card complete' : 'marked this card incomplete');
     if ('archived' in b && bool(b.archived) !== card.archived) log(b.archived ? 'archived this card' : 'restored this card');
     if ('title' in b && str(b.title) && str(b.title, 300) !== card.title) log(`renamed this card to "${str(b.title, 300)}"`);
@@ -257,7 +254,7 @@ api.post('/cards/:id/move', (req, res) => {
     if (target.id !== card.list_id) {
       const from = getList(card.list_id);
       touchCard(card.id);
-      logActivity(card.board_id, card.id, req.actor, `moved this card from ${from.name} to ${target.name}`);
+      logActivity(card.board_id, card.id, req.who, `moved this card from ${from.name} to ${target.name}`);
     }
   })();
   res.json(getCard(card.id));
@@ -296,7 +293,7 @@ api.put('/cards/:id/labels/:labelId', (req, res) => {
   const card = getCard(req.params.id);
   const label = db.prepare('SELECT * FROM labels WHERE id = ? AND board_id = ?').get(req.params.labelId, card.board_id) || notFound('Label');
   const r = db.prepare('INSERT OR IGNORE INTO card_labels (card_id, label_id) VALUES (?, ?)').run(card.id, label.id);
-  if (r.changes) logActivity(card.board_id, card.id, req.actor, `added label "${label.name || label.color}"`);
+  if (r.changes) logActivity(card.board_id, card.id, req.who, `added label "${label.name || label.color}"`);
   res.json({ ok: true });
 });
 
@@ -304,7 +301,7 @@ api.delete('/cards/:id/labels/:labelId', (req, res) => {
   const card = getCard(req.params.id);
   const label = db.prepare('SELECT * FROM labels WHERE id = ?').get(req.params.labelId);
   const r = db.prepare('DELETE FROM card_labels WHERE card_id = ? AND label_id = ?').run(card.id, req.params.labelId);
-  if (r.changes && label) logActivity(card.board_id, card.id, req.actor, `removed label "${label.name || label.color}"`);
+  if (r.changes && label) logActivity(card.board_id, card.id, req.who, `removed label "${label.name || label.color}"`);
   res.status(204).end();
 });
 
@@ -316,7 +313,7 @@ api.post('/cards/:id/checklists', (req, res) => {
   const title = str(req.body.title, 200) || 'Checklist';
   db.prepare('INSERT INTO checklists (id, card_id, title, position, due_date) VALUES (?, ?, ?, ?, ?)')
     .run(id, card.id, title, nextPos('checklists', 'card_id', card.id), dateOrNull(req.body.due_date));
-  logActivity(card.board_id, card.id, req.actor, `added checklist "${title}"`);
+  logActivity(card.board_id, card.id, req.who, `added checklist "${title}"`);
   res.status(201).json({ ...db.prepare('SELECT * FROM checklists WHERE id = ?').get(id), items: [] });
 });
 
@@ -324,7 +321,7 @@ api.patch('/checklists/:id', (req, res) => {
   const cl = getChecklist(req.params.id);
   patch('checklists', cl.id, req.body, { title: (v) => str(v, 200) || cl.title, due_date: dateOrNull });
   if ('due_date' in req.body && dateOrNull(req.body.due_date) !== cl.due_date) {
-    logActivity(cl.board_id, cl.card_id, req.actor, req.body.due_date ? `set "${cl.title}" due ${req.body.due_date}` : `removed the due date from "${cl.title}"`);
+    logActivity(cl.board_id, cl.card_id, req.who, req.body.due_date ? `set "${cl.title}" due ${req.body.due_date}` : `removed the due date from "${cl.title}"`);
   }
   res.json(db.prepare('SELECT * FROM checklists WHERE id = ?').get(cl.id));
 });
@@ -332,7 +329,7 @@ api.patch('/checklists/:id', (req, res) => {
 api.delete('/checklists/:id', (req, res) => {
   const cl = getChecklist(req.params.id);
   db.prepare('DELETE FROM checklists WHERE id = ?').run(cl.id);
-  logActivity(cl.board_id, cl.card_id, req.actor, `removed checklist "${cl.title}"`);
+  logActivity(cl.board_id, cl.card_id, req.who, `removed checklist "${cl.title}"`);
   res.status(204).end();
 });
 
@@ -348,7 +345,7 @@ api.patch('/items/:id', (req, res) => {
   const item = getItem(req.params.id);
   patch('checklist_items', item.id, req.body, { text: (v) => str(v, 500) || item.text, done: bool, due_date: dateOrNull });
   if ('done' in req.body && bool(req.body.done) !== item.done) {
-    logActivity(item.board_id, item.card_id, req.actor, `${req.body.done ? 'completed' : 'unchecked'} "${item.text}"`);
+    logActivity(item.board_id, item.card_id, req.who, `${req.body.done ? 'completed' : 'unchecked'} "${item.text}"`);
   }
   res.json(db.prepare('SELECT * FROM checklist_items WHERE id = ?').get(item.id));
 });
@@ -381,7 +378,7 @@ api.post('/cards/:id/attachments', upload.single('file'), (req, res) => {
   const id = uuid();
   db.prepare('INSERT INTO attachments (id, card_id, filename, stored_name, mime, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(id, card.id, filename, req.file.filename, req.file.mimetype, req.file.size, now());
-  logActivity(card.board_id, card.id, req.actor, `attached ${filename}`);
+  logActivity(card.board_id, card.id, req.who, `attached ${filename}`);
   res.status(201).json(db.prepare('SELECT * FROM attachments WHERE id = ?').get(id));
 });
 
@@ -398,7 +395,7 @@ api.delete('/attachments/:id', (req, res) => {
     JOIN lists l ON l.id = c.list_id WHERE a.id = ?`).get(req.params.id) || notFound('Attachment');
   db.prepare('DELETE FROM attachments WHERE id = ?').run(a.id);
   removeUpload(a.stored_name);
-  logActivity(a.board_id, a.card_id, req.actor, `removed attachment ${a.filename}`);
+  logActivity(a.board_id, a.card_id, req.who, `removed attachment ${a.filename}`);
   res.status(204).end();
 });
 
@@ -409,13 +406,15 @@ api.post('/cards/:id/comments', (req, res) => {
   const body = typeof req.body.body === 'string' ? req.body.body.trim().slice(0, 20000) : '';
   if (!body) throw new HttpError(400, 'Comment is empty');
   const id = uuid();
-  db.prepare('INSERT INTO comments (id, card_id, author, body, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(id, card.id, req.actor, body, now());
+  db.prepare('INSERT INTO comments (id, card_id, author, user_id, body, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, card.id, req.who.name, req.who.id, body, now());
   res.status(201).json(db.prepare('SELECT * FROM comments WHERE id = ?').get(id));
 });
 
 api.delete('/comments/:id', (req, res) => {
-  db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.id);
+  const c = db.prepare('SELECT * FROM comments WHERE id = ?').get(req.params.id) || notFound('Comment');
+  if (c.user_id !== req.user.id && req.user.role !== 'admin') throw new HttpError(403, 'You can only delete your own comments');
+  db.prepare('DELETE FROM comments WHERE id = ?').run(c.id);
   res.status(204).end();
 });
 

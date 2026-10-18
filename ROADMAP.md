@@ -19,14 +19,14 @@
 - [x] Archive-list button in the list header, plus "Archive all cards in this list"
 - [x] Due dates on lists (also shown on collapsed lists) and on sublists (checklists), with the next sublist due date on the card face
 - [x] All settings in one place: Profile, Appearance, Boards & labels (rename, color, label editor, complete/archive/delete), Server, About
+- [x] Accounts: first-run admin setup, local sign-in (scrypt, 30-day sessions), optional self sign-up, admin user management
+- [x] User profiles: display name, email, password, raccoon avatars (12 presets) or photo upload; comments/activity linked to users
+- [x] OIDC single sign-on (Authentik, Authelia, Keycloak, Google…) with PKCE, auto-create and verified-email linking
 
 ## Phase 2: Accounts and sharing
 
-- [ ] Local accounts (username/password, sessions)
-- [ ] OIDC sign-in (Authentik, Authelia, Keycloak, Google, …)
 - [ ] Share boards with family or with individuals (viewer / editor roles)
 - [ ] Card members: assign people to cards, filter by member
-- [ ] Raccoon avatars (pick one or upload a photo)
 - [ ] @mentions in comments
 
 ## Phase 3: Views and dates

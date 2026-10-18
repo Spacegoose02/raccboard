@@ -10,4 +10,13 @@ services:
     environment:
       - TZ=America/New_York
       # - MAX_UPLOAD_MB=25
+      # - ALLOW_SIGNUP=false
+      # Behind a reverse proxy with HTTPS:
+      # - TRUST_PROXY=true
+      # - PUBLIC_URL=https://kanban.example.com
+      # Single sign-on (Authentik, Authelia, Keycloak, Google…):
+      # - OIDC_ISSUER=https://auth.example.com/application/o/rackboard/
+      # - OIDC_CLIENT_ID=rackboard
+      # - OIDC_CLIENT_SECRET=change-me
+      # - OIDC_NAME=Authentik
     restart: unless-stopped
