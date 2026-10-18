@@ -68,13 +68,19 @@ export default function Settings({ boardId }) {
 
 function ProfileSettings() {
   const { user } = useAuth();
-  const [form, setForm] = useState({ display_name: user.display_name, email: user.email });
+  const [form, setForm] = useState({ username: user.username, display_name: user.display_name, email: user.email });
   const [pw, setPw] = useState({ current_password: '', new_password: '', confirm: '' });
   const [msg, setMsg] = useState({ profile: '', password: '', avatar: '' });
   const fileRef = useRef(null);
   const note = (k, v) => setMsg((m) => ({ ...m, [k]: v }));
   const save = async (body, key, done = 'Saved ✓') => {
-    try { setCurrentUser(await api.patch('/auth/me', body)); note(key, done); return true; } catch (e) { note(key, e.message); return false; }
+    try {
+      const u = await api.patch('/auth/me', body);
+      setCurrentUser(u);
+      if (key === 'profile') setForm((f) => ({ ...f, username: u.username })); // show the saved (lowercase) form
+      note(key, done);
+      return true;
+    } catch (e) { note(key, e.message); return false; }
   };
   const savePassword = async () => {
     if (pw.new_password !== pw.confirm) { note('password', 'New passwords do not match'); return; }
@@ -115,7 +121,11 @@ function ProfileSettings() {
 
       <h4>Details</h4>
       <div className="form-grid">
-        <label className="field">Display name<input value={form.display_name} maxLength={60} onChange={(e) => setForm({ ...form, display_name: e.target.value })} /></label>
+        <label className="field">Username (to sign in)
+          <input value={form.username} maxLength={32} autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="username"
+            onChange={(e) => setForm({ ...form, username: e.target.value })} />
+        </label>
+        <label className="field">Display name (shown to others)<input value={form.display_name} maxLength={60} onChange={(e) => setForm({ ...form, display_name: e.target.value })} /></label>
         <label className="field">Email<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
       </div>
       <div className="row">
@@ -157,6 +167,7 @@ function UsersSettings() {
   };
   const add = () => act(async () => { await api.post('/users', form); setForm(empty); }, `Added ${form.username} ✓`);
   const [resetFor, setResetFor] = useState(null);
+  const [renameFor, setRenameFor] = useState(null);
 
   return (
     <>
@@ -167,12 +178,14 @@ function UsersSettings() {
           <div key={u.id} className="user-row">
             <Avatar user={u} size={36} />
             <div className="grow">
-              <div><b>{u.display_name}</b> <span className="muted">@{u.username}</span></div>
+              <div><b>{u.display_name}</b></div>
+              <div className="small">Signs in as <code>{u.username}</code></div>
               <div className="muted small">{u.role}{u.oidc ? ' · single sign-on' : ''}{u.email ? ` · ${u.email}` : ''}</div>
             </div>
             {u.id !== me.id && (
               <Menu items={[
                 { label: u.role === 'admin' ? 'Make regular user' : 'Make admin', onClick: () => act(() => api.patch(`/users/${u.id}`, { role: u.role === 'admin' ? 'user' : 'admin' })) },
+                { label: 'Change username', onClick: () => setRenameFor(u) },
                 { label: 'Reset password', onClick: () => setResetFor(u) },
                 { label: 'Delete user', danger: true, onClick: () => confirm(`Delete ${u.display_name}? Their comments stay, unlinked from the account.`) && act(() => api.del(`/users/${u.id}`)) },
               ]} />
@@ -180,6 +193,18 @@ function UsersSettings() {
           </div>
         ))}
       </div>
+      {renameFor && (
+        <UsernameDialog
+          user={renameFor}
+          onCancel={() => setRenameFor(null)}
+          onSave={async (username) => {
+            const u = await api.patch(`/users/${renameFor.id}`, { username });
+            setMsg(`${renameFor.display_name} now signs in as "${u.username}" ✓ Their password is unchanged.`);
+            setRenameFor(null);
+            loadUsers();
+          }}
+        />
+      )}
       {resetFor && (
         <PasswordDialog
           title={`New password for ${resetFor.display_name} (@${resetFor.username})`}
@@ -463,6 +488,36 @@ function PasswordDialog({ title, onSave, onCancel }) {
           <button className="btn" type="button" onClick={onCancel}>Cancel</button>
         </div>
         <p className="muted small">They'll be signed out on all devices and can sign in with this password right away.</p>
+      </form>
+    </div>
+  );
+}
+
+function UsernameDialog({ user, onSave, onCancel }) {
+  const [name, setName] = useState(user.username);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const clean = name.trim().toLowerCase();
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!/^[a-z0-9._-]{2,32}$/.test(clean)) return setError('2-32 characters: letters, numbers, dot, dash or underscore');
+    setBusy(true);
+    try { await onSave(clean); } catch (err) { setError(err.message); setBusy(false); }
+  };
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <form className="modal small stack" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h3>Change username for {user.display_name}</h3>
+        <label className="field">New username
+          <input autoFocus value={name} maxLength={32} autoCapitalize="off" autoCorrect="off" spellCheck={false} onChange={(e) => setName(e.target.value)} />
+        </label>
+        {clean && clean !== name && <p className="muted small">Will be saved as <code>{clean}</code></p>}
+        {error && <p className="error small">{error}</p>}
+        <div className="row">
+          <button className="btn primary" type="submit" disabled={busy || !clean}>{busy ? 'Saving…' : 'Save'}</button>
+          <button className="btn" type="button" onClick={onCancel}>Cancel</button>
+        </div>
+        <p className="muted small">This is what they type to sign in. Their password and everything else stay the same.</p>
       </form>
     </div>
   );

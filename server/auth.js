@@ -110,6 +110,13 @@ function checkPassword(p) {
   // Phone keyboards add a trailing space after a word; a password that can't be retyped locks people out.
   if (p !== p.trim()) fail(400, 'Password cannot start or end with a space');
 }
+// Validates a new sign-in name for a user; returns it, or null when it is unchanged.
+function newUsername(v, user) {
+  const name = cleanUsername(v);
+  if (name === user.username.toLowerCase()) return null;
+  checkUsername(name);
+  return name;
+}
 const cleanName = (v, fallback) => String(v || '').trim().slice(0, 60) || fallback;
 const cleanEmail = (v) => {
   const e = String(v || '').trim().slice(0, 200);
@@ -246,6 +253,7 @@ authRouter.patch('/auth/me', requireUser, async (req, res) => {
   const u = req.user;
   const sets = {};
   if ('display_name' in b) sets.display_name = cleanName(b.display_name, u.display_name);
+  if ('username' in b) { const name = newUsername(b.username, u); if (name) sets.username = name; }
   if ('email' in b) sets.email = cleanEmail(b.email);
   if ('avatar' in b) {
     sets.avatar = cleanAvatar(b.avatar);
@@ -314,6 +322,10 @@ authRouter.patch('/users/:id', requireAdmin, async (req, res) => {
     db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, u.id);
   }
   if ('display_name' in req.body) db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(cleanName(req.body.display_name, u.display_name), u.id);
+  if ('username' in req.body) {
+    const name = newUsername(req.body.username, u);
+    if (name) db.prepare('UPDATE users SET username = ? WHERE id = ?').run(name, u.id);
+  }
   if (req.body.password) {
     checkPassword(req.body.password);
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(req.body.password), u.id);

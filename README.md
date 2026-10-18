@@ -118,12 +118,13 @@ Everyone has a profile with a display name, email, and avatar: one of 12 raccoon
 
 ### Locked out? Reset a password from the server
 
-Admins can reset anyone's password in **Settings → Users**. If no admin can sign in, use the recovery command inside the container. On Unraid: Docker tab → Raccboard icon → **Console**, or from any shell:
+Your **username** is what you type to sign in; it's lowercase and separate from your display name. Change your own in **Settings → Profile**. Admins can change anyone's username or reset their password in **Settings → Users**. If no admin can sign in, use the recovery command inside the container. On Unraid: Docker tab → Raccboard icon → **Console**, or from any shell:
 
 ```bash
 docker exec -it rackboard node server/cli.js list-users
 docker exec -it rackboard node server/cli.js reset-password <username> '<new password>'
 docker exec -it rackboard node server/cli.js make-admin <username>
+docker exec -it rackboard node server/cli.js rename-user <old-username> <new-username>
 ```
 
 It works while Raccboard is running, signs that user out everywhere, and keeps `/data` owned by `PUID:PGID`. Without Docker, run `node server/cli.js …` in the app folder with the same `DATA_DIR`.

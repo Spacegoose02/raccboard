@@ -114,6 +114,16 @@ check(afterReset.ok, 'admin password reset lets the user sign in');
 const spaced = await fetch(`${base}/users/${extra.id}`, { method: 'PATCH', headers, body: JSON.stringify({ password: 'trailing-space ' }) });
 check(spaced.status === 400, 'passwords with a leading or trailing space are rejected');
 await call('PATCH', `/users/${extra.id}`, { password: 'another-password' });
+// Usernames can be changed by the user or an admin; the old name stops working, the password stays.
+const renamed = await call('PATCH', `/users/${extra.id}`, { username: `  ${extraName}-NEW ` });
+check(renamed.username === `${extraName}-new`, 'admin renames a user (trimmed, lowercased)');
+const oldName = await fetch(base + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: extraName, password: 'another-password' }) });
+check(oldName.status === 401, 'the old username no longer signs in');
+const taken = await fetch(`${base}/users/${extra.id}`, { method: 'PATCH', headers, body: JSON.stringify({ username: SMOKE_USER }) });
+check(taken.status === 409, 'renaming to a taken username is refused');
+const extraToken = (await call('POST', '/auth/login', { username: `${extraName}-new`, password: 'another-password' })).token;
+const self = await call('PATCH', '/auth/me', { username: extraName }, extraToken);
+check(self.username === extraName, 'a user changes their own username in Profile');
 const other = (await call('POST', '/auth/login', { username: extraName, password: 'another-password' })).token;
 const status404 = async (method, path, body) => {
   const r = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${other}` }, body: body && JSON.stringify(body) });
