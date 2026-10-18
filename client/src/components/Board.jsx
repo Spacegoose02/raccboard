@@ -14,6 +14,16 @@ import { CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
 import CardModal from './CardModal.jsx';
 import { Avatar } from './Avatar.jsx';
 import { ShareDialog } from './Share.jsx';
+import ListView from './ListView.jsx';
+import CalendarView from './CalendarView.jsx';
+
+const VIEWS = [
+  { id: 'board', label: '▥ Board' },
+  { id: 'list', label: '☰ List' },
+  { id: 'calendar', label: '📅 Calendar' },
+];
+const viewKey = (boardId) => `rackboard.view.${boardId}`;
+const savedView = (boardId) => { try { return localStorage.getItem(viewKey(boardId)) || 'board'; } catch { return 'board'; } };
 import { useAuth } from '../auth.js';
 
 const LIST = 'list:';
@@ -30,6 +40,8 @@ export default function Board({ boardId, cardId }) {
   const [active, setActive] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [view, setViewState] = useState(() => savedView(boardId));
+  const setView = (v) => { setViewState(v); try { localStorage.setItem(viewKey(boardId), v); } catch { /* storage blocked */ } };
   // Card filter: selected member ids, and "only my cards".
   const [filter, setFilter] = useState({ members: [], mine: false });
   const { user: me } = useAuth();
@@ -55,6 +67,15 @@ export default function Board({ boardId, cardId }) {
   const listsById = useMemo(() => Object.fromEntries((data?.lists || []).map((l) => [l.id, l])), [data]);
   const labelsById = useMemo(() => Object.fromEntries((data?.labels || []).map((l) => [l.id, l])), [data]);
   const peopleById = useMemo(() => Object.fromEntries((data?.people || []).map((p) => [p.id, p])), [data]);
+  const filterKey = `${filter.mine}|${filter.members.join(',')}`;
+  const keepEvent = useCallback((e) => {
+    if (!filter.mine && !filter.members.length) return true;
+    const card = e.card_id && cardsById[e.card_id];
+    if (!card) return false;
+    if (filter.mine && !card.member_ids.includes(me?.id)) return false;
+    return !filter.members.length || filter.members.some((id) => card.member_ids.includes(id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, cardsById, me?.id]);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -187,6 +208,11 @@ export default function Board({ boardId, cardId }) {
     <div className="board" style={{ '--board-accent': board.color || 'var(--accent)' }}>
       <div className="board-bar">
         <InlineEdit value={board.name} onSave={renameBoard} className="board-title" readOnly={!isOwner} />
+        <div className="view-switch" role="tablist" aria-label="View">
+          {VIEWS.map((v) => (
+            <button key={v.id} role="tab" aria-selected={view === v.id} className={view === v.id ? 'on' : ''} onClick={() => setView(v.id)}>{v.label}</button>
+          ))}
+        </div>
         {role !== 'owner' && <span className="badge plain role-badge" title="Your access to this board">{role === 'viewer' ? '👁 View only' : '✎ Editor'}</span>}
         {board.completed_at && <span className="badge done">Completed {formatDate(board.completed_at.slice(0, 10))}</span>}
         {board.archived ? <span className="badge">Archived</span> : null}
@@ -213,7 +239,9 @@ export default function Board({ boardId, cardId }) {
         </div>
       )}
 
-      <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
+      {view === 'list' && <ListView data={data} cards={data.cards.filter(shows)} ctx={ctx} />}
+      {view === 'calendar' && <CalendarView boardId={boardId} keep={keepEvent} canEdit={canEdit} onChanged={load} />}
+      {view === 'board' && <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
         <div className={`lists ${active ? 'is-dragging' : ''}`}>
           <SortableContext items={listOrder.map((id) => LIST + id)} strategy={horizontalListSortingStrategy}>
             {listOrder.map((id) => listsById[id] && (
@@ -235,7 +263,7 @@ export default function Board({ boardId, cardId }) {
             </div>
           )}
         </DragOverlay>
-      </DndContext>
+      </DndContext>}
 
       {cardId && (
         <CardModal

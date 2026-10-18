@@ -18,6 +18,7 @@ Runs as a single Node process with a single SQLite file, so it is easy to back u
   - attachments: upload with the button or drag files onto the card, then download or delete
   - **Comments and activity** panel: a comment box plus an activity log (card created, moved, completed, labels, dates, checklist items, attachments)
 - **Card face**: label chips, dates, checklist progress, comment and attachment counts.
+- **Three views per board** (top of the board): **Board**, **List** (a sortable, searchable table) and **Calendar** (a month view of cards, sublists, checklist items and lists; drag an entry to another day to reschedule it). **📅 Calendar** in the top bar shows every board at once.
 - **Labels as custom statuses**: each board starts with *In progress*, *Cancelled*, *Future* and *Done*. You can rename, recolor, add or delete them.
 - **Archived items** drawer on each board, where you can restore or permanently delete lists and cards.
 - **Settings in one place**: your display name, theme, and per-board settings (rename, color, label editor, complete/archive/delete). Open them from the board with **⚙ Board settings**.
