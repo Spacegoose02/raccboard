@@ -512,3 +512,36 @@ textarea.modal-title { min-height: 40px; }
 .setup h2 { text-align: center; }
 /* Snap would fight dnd-kit's edge auto-scroll while dragging. */
 .lists.is-dragging { scroll-snap-type: none; }
+
+/* Due dates on collapsed lists and checklists */
+.collapsed-due { font-size: 12px; border-radius: 4px; padding: 0 2px; }
+.collapsed-due.overdue { background: var(--overdue-bg); }
+.collapsed-due.soon { background: var(--warn-bg); }
+.checklist .popover { left: auto; right: 0; top: 36px; }
+.section-head .row { flex-wrap: wrap; justify-content: flex-end; }
+
+/* Settings: one page, sectioned */
+.settings { max-width: 980px; }
+.settings-layout { display: grid; grid-template-columns: 180px 1fr; gap: 20px; align-items: start; }
+.settings-nav { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 2px; }
+.settings-nav button { background: none; border: none; text-align: left; padding: 8px 10px; border-radius: 6px; color: var(--text); }
+.settings-nav button:hover { background: var(--btn-hover); color: var(--text-strong); }
+.settings-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.settings-body .panel { scroll-margin-top: 12px; }
+.settings .page section, .settings-body section { margin-bottom: 0; }
+.board-settings h4 { margin-top: 8px; }
+.board-settings .field .row input { max-width: none; }
+.label-editor { display: flex; flex-direction: column; gap: 6px; }
+.label-row { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; align-items: center; }
+.label-row .label-colors { grid-column: 1 / -1; }
+.label-swatch { width: 32px; height: 32px; display: inline-block; flex: none; border-radius: 6px; }
+.new-label { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; }
+.row.wrap { flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-nav { position: sticky; top: 0; z-index: 10; flex-direction: row; overflow-x: auto; background: var(--bg); padding: 6px 0; }
+  .settings-nav button { white-space: nowrap; background: var(--btn-bg); }
+}
+.board-settings .swatches { max-width: 340px; }
+.board-settings .swatch { height: 24px; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }

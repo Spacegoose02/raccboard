@@ -6,10 +6,10 @@ import Board from './components/Board.jsx';
 import Settings from './components/Settings.jsx';
 import ServerSetup from './components/ServerSetup.jsx';
 
-// Tiny hash router: #/  ·  #/settings  ·  #/b/:boardId  ·  #/b/:boardId/c/:cardId
+// Tiny hash router: #/  ·  #/settings[/board/:boardId]  ·  #/b/:boardId  ·  #/b/:boardId/c/:cardId
 function parse(hash) {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  if (parts[0] === 'settings') return { page: 'settings' };
+  if (parts[0] === 'settings') return { page: 'settings', boardId: parts[1] === 'board' ? parts[2] : null };
   if (parts[0] === 'b' && parts[1]) return { page: 'board', boardId: parts[1], cardId: parts[2] === 'c' ? parts[3] : null };
   return { page: 'home' };
 }
@@ -39,7 +39,7 @@ export default function App() {
       <main className="main">
         {IS_NATIVE && !serverUrl ? <ServerSetup onDone={() => { window.location.hash = '/'; }} /> : (<>
         {route.page === 'home' && <Home />}
-        {route.page === 'settings' && <Settings />}
+        {route.page === 'settings' && <Settings key={route.boardId || ''} boardId={route.boardId} />}
         {route.page === 'board' && <Board key={route.boardId} boardId={route.boardId} cardId={route.cardId} />}
         </>)}
       </main>

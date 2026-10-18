@@ -20,7 +20,8 @@ Runs as a single Node process with a single SQLite file, so it is easy to back u
 - **Card face**: label chips, dates, checklist progress, comment and attachment counts.
 - **Labels as custom statuses**: each board starts with *In progress*, *Cancelled*, *Future* and *Done*. You can rename, recolor, add or delete them.
 - **Archived items** drawer on each board, where you can restore or permanently delete lists and cards.
-- **Settings**: your display name (used on comments and activity) and the theme.
+- **Settings in one place**: your display name, theme, and per-board settings (rename, color, label editor, complete/archive/delete). Open them from the board with **⚙ Board settings**.
+- **Due dates everywhere**: on cards, lists and checklists (sublists), and on individual checklist items. The card face shows the next sublist due date.
 - **Themes**: Charcoal (default dark), Light, Midnight, Raccoon gray, Forest, Solarized and Dracula.
 - **Phones and tablets**:
   - lists swipe sideways with snap

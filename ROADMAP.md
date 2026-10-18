@@ -14,6 +14,12 @@
 - [x] Installable PWA (manifest, app-shell service worker, raccoon icons)
 - [x] Android APK via Capacitor: asks for the server URL on first launch; built locally (`npm run android:apk`, JDK 21 + Android SDK) or in GitHub Actions
 
+## v1.0.0 (in progress)
+
+- [x] Archive-list button in the list header, plus "Archive all cards in this list"
+- [x] Due dates on lists (also shown on collapsed lists) and on sublists (checklists), with the next sublist due date on the card face
+- [x] All settings in one place: Profile, Appearance, Boards & labels (rename, color, label editor, complete/archive/delete), Server, About
+
 ## Phase 2: Accounts and sharing
 
 - [ ] Local accounts (username/password, sessions)
