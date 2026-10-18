@@ -60,7 +60,7 @@ const mock = http.createServer(async (req, res) => {
 });
 await new Promise((r) => mock.listen(MOCK_PORT, r));
 
-/* ---------- Rackboard pointed at it ---------- */
+/* ---------- Raccboard pointed at it ---------- */
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rb-google-'));
 const server = spawn(process.execPath, ['server/index.js'], {
   env: {

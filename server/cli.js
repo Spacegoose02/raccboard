@@ -28,7 +28,7 @@ const noSuchUser = (name) => die(`No user "${name}". Users: ${db.prepare('SELECT
 switch (command) {
   case 'list-users': {
     const users = db.prepare('SELECT username, display_name, role, email, password_hash IS NOT NULL AS has_pw, oidc_sub IS NOT NULL AS sso FROM users ORDER BY username').all();
-    if (!users.length) console.log('No users yet. Open Rackboard in a browser to create the first (admin) account.');
+    if (!users.length) console.log('No users yet. Open Raccboard in a browser to create the first (admin) account.');
     for (const u of users) {
       console.log(`${u.username.padEnd(24)} ${u.role.padEnd(6)} ${u.display_name}${u.email ? ` <${u.email}>` : ''}${u.sso ? ' [single sign-on]' : ''}${u.has_pw ? '' : ' [no password]'}`);
     }

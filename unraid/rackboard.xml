@@ -7,7 +7,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Spacegoose02/rackboard/issues</Support>
   <Project>https://github.com/Spacegoose02/rackboard</Project>
-  <Overview>Rackboard: a self-hosted Kanban board with lists, checklists (sublists), sharing with family, calendar and list views, Google Calendar sync, email, themes and an Android app. Open the WebUI and create the first (admin) account.</Overview>
+  <Overview>Raccboard: a self-hosted Kanban board with lists, checklists (sublists), sharing with family, calendar and list views, Google Calendar sync, email, themes and an Android app. Open the WebUI and create the first (admin) account.</Overview>
   <Category>Productivity: Tools:</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Spacegoose02/rackboard/main/unraid/rackboard.xml</TemplateURL>

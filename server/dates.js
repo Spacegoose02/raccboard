@@ -111,10 +111,10 @@ function fold(line) {
   return parts.join('\r\n ');
 }
 
-export function buildIcs(events, calName = 'Rackboard') {
+export function buildIcs(events, calName = 'Raccboard') {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const lines = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Rackboard//Kanban//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Raccboard//Kanban//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     `X-WR-CALNAME:${icsText(calName)}`,
   ];
   for (const e of events) {

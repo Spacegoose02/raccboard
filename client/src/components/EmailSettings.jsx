@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.js';
 
-// Admin: the mail server Rackboard sends through (Gmail, Fastmail, your ISP, a relay…).
+// Admin: the mail server Raccboard sends through (Gmail, Fastmail, your ISP, a relay…).
 export default function EmailSettings() {
   const { user } = useAuth();
   const [form, setForm] = useState(null);
@@ -45,7 +45,7 @@ export default function EmailSettings() {
         <label className="field">Username<input value={form.user} onChange={set('user')} autoComplete="off" autoCapitalize="off" /></label>
         <label className="field">Password<input type="password" value={form.pass} onChange={set('pass')} autoComplete="new-password"
           placeholder={form.has_password ? 'Saved (leave blank to keep)' : ''} /></label>
-        <label className="field">From address<input value={form.from} onChange={set('from')} placeholder='Rackboard <kanban@example.com>' /></label>
+        <label className="field">From address<input value={form.from} onChange={set('from')} placeholder='Raccboard <kanban@example.com>' /></label>
         <label className="check-field"><input type="checkbox" checked={!!form.secure} onChange={set('secure')} /> Use SSL/TLS from the start (port 465)</label>
       </div>
       <div className="row wrap">

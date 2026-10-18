@@ -8,14 +8,14 @@ export function normalizeServerUrl(input) {
   return url;
 }
 
-// Checks that a Rackboard server answers at the URL before saving it.
+// Checks that a Raccboard server answers at the URL before saving it.
 export async function testServer(url) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 6000);
   try {
     const res = await fetch(`${url}/api/health`, { signal: ctrl.signal });
     const body = await res.json();
-    if (!res.ok || !body.ok) throw new Error('Not a Rackboard server');
+    if (!res.ok || !body.ok) throw new Error('Not a Raccboard server');
   } catch (e) {
     throw new Error(e.name === 'AbortError' ? 'Timed out' : e.message);
   } finally {

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { api } from './api.js';
 import { DATA_DIR } from './db.js';
 
-const APP_NAME = process.env.APP_NAME || 'Rackboard';
+const APP_NAME = process.env.APP_NAME || 'Raccboard';
 const PORT = Number(process.env.PORT || 3000);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'client', 'dist');

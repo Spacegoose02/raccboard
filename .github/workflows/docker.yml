@@ -70,7 +70,7 @@ jobs:
             type=semver,pattern={{major}},value=${{ steps.ref.outputs.ref }},enable=${{ steps.ref.outputs.tag }}
             type=sha,format=short
           labels: |
-            org.opencontainers.image.title=Rackboard
+            org.opencontainers.image.title=Raccboard
             org.opencontainers.image.source=https://github.com/Spacegoose02/rackboard
             org.opencontainers.image.licenses=MIT
 
