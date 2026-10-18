@@ -156,10 +156,7 @@ function UsersSettings() {
     loadUsers();
   };
   const add = () => act(async () => { await api.post('/users', form); setForm(empty); }, `Added ${form.username} ✓`);
-  const resetPassword = (u) => {
-    const p = prompt(`New password for ${u.username} (8+ characters):`);
-    if (p) act(() => api.patch(`/users/${u.id}`, { password: p }), 'Password reset ✓ They were signed out everywhere.');
-  };
+  const [resetFor, setResetFor] = useState(null);
 
   return (
     <>
@@ -176,13 +173,24 @@ function UsersSettings() {
             {u.id !== me.id && (
               <Menu items={[
                 { label: u.role === 'admin' ? 'Make regular user' : 'Make admin', onClick: () => act(() => api.patch(`/users/${u.id}`, { role: u.role === 'admin' ? 'user' : 'admin' })) },
-                { label: 'Reset password', onClick: () => resetPassword(u) },
+                { label: 'Reset password', onClick: () => setResetFor(u) },
                 { label: 'Delete user', danger: true, onClick: () => confirm(`Delete ${u.display_name}? Their comments stay, unlinked from the account.`) && act(() => api.del(`/users/${u.id}`)) },
               ]} />
             )}
           </div>
         ))}
       </div>
+      {resetFor && (
+        <PasswordDialog
+          title={`New password for ${resetFor.display_name} (@${resetFor.username})`}
+          onCancel={() => setResetFor(null)}
+          onSave={async (password) => {
+            await api.patch(`/users/${resetFor.id}`, { password });
+            setMsg(`Password for @${resetFor.username} reset ✓ They were signed out everywhere.`);
+            setResetFor(null);
+          }}
+        />
+      )}
       <h4>Add a user</h4>
       <div className="form-grid">
         <label className="field">Username<input autoCapitalize="off" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></label>
@@ -423,5 +431,39 @@ function InlineTeamName({ team, editable, onSave }) {
       <input value={name} maxLength={80} onChange={(e) => setName(e.target.value)}
         onBlur={() => name.trim() && name !== team.name && onSave(name)} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()} />
     </span>
+  );
+}
+
+// A real password form: masked by default, no auto-capitalize or autocorrect, typed twice.
+function PasswordDialog({ title, onSave, onCancel }) {
+  const [pw, setPw] = useState('');
+  const [confirm2, setConfirm2] = useState('');
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (pw.length < 8) return setError('Use at least 8 characters');
+    if (pw !== pw.trim()) return setError('Remove the space at the start or end');
+    if (pw !== confirm2) return setError("The two passwords don't match");
+    setBusy(true);
+    try { await onSave(pw); } catch (err) { setError(err.message); setBusy(false); }
+  };
+  const field = { type: show ? 'text' : 'password', autoComplete: 'new-password', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false };
+  return (
+    <div className="modal-backdrop" onMouseDown={onCancel}>
+      <form className="modal small stack" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h3>{title}</h3>
+        <label className="field">New password<input {...field} autoFocus value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+        <label className="field">Type it again<input {...field} value={confirm2} onChange={(e) => setConfirm2(e.target.value)} /></label>
+        <label className="check-field"><input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> Show password</label>
+        {error && <p className="error small">{error}</p>}
+        <div className="row">
+          <button className="btn primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Set password'}</button>
+          <button className="btn" type="button" onClick={onCancel}>Cancel</button>
+        </div>
+        <p className="muted small">They'll be signed out on all devices and can sign in with this password right away.</p>
+      </form>
+    </div>
   );
 }

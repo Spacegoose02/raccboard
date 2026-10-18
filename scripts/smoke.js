@@ -107,6 +107,13 @@ const boards = await call('GET', '/boards');
 check(boards.find((b) => b.id === board.id).completed_at, 'complete board');
 
 /* ----- sharing, teams and card members ----- */
+// Regression: an admin resets someone's password, and they can sign in with it (with any username case).
+await call('PATCH', `/users/${extra.id}`, { password: 'reset-by-admin-1' });
+const afterReset = await fetch(base + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: extraName.toUpperCase(), password: 'reset-by-admin-1' }) });
+check(afterReset.ok, 'admin password reset lets the user sign in');
+const spaced = await fetch(`${base}/users/${extra.id}`, { method: 'PATCH', headers, body: JSON.stringify({ password: 'trailing-space ' }) });
+check(spaced.status === 400, 'passwords with a leading or trailing space are rejected');
+await call('PATCH', `/users/${extra.id}`, { password: 'another-password' });
 const other = (await call('POST', '/auth/login', { username: extraName, password: 'another-password' })).token;
 const status404 = async (method, path, body) => {
   const r = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${other}` }, body: body && JSON.stringify(body) });
