@@ -5,15 +5,17 @@ import { api, apiUrl } from '../api.js';
 import { COLORS } from '../config.js';
 import { dueStatus, formatDate, timeAgo } from '../dates.js';
 import { ColorPicker, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
-import { useSettings } from '../settings.js';
+import { useAuth, userById } from '../auth.js';
+import { Avatar } from './Avatar.jsx';
 
 const mdComponents = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" /> };
 const Markdown = ({ children }) => <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{children}</ReactMarkdown></div>;
 
-export default function CardModal({ cardId, labels, onChanged, onClose }) {
+export default function CardModal({ cardId, labels, people = [], onChanged, onClose }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
-  const [pop, setPop] = useState(null); // 'labels' | 'dates' | 'checklist'
+  const [pop, setPop] = useState(null); // 'labels' | 'dates' | 'checklist' | 'members'
+  const { user: me } = useAuth();
   const fileRef = useRef(null);
 
   const load = useCallback(() => api.get(`/cards/${cardId}`).then(setDetail).catch((e) => setError(e.message)), [cardId]);
@@ -45,6 +47,10 @@ export default function CardModal({ cardId, labels, onChanged, onClose }) {
   const patchCard = (body) => run(() => api.patch(`/cards/${card.id}`, body));
   const cardLabels = labels.filter((l) => card.label_ids.includes(l.id));
   const due = dueStatus(card.due_date, card.completed);
+  const canEdit = card.my_role === 'editor' || card.my_role === 'owner';
+  const members = card.member_ids.map((id) => people.find((p) => p.id === id) || userById(id)).filter(Boolean);
+  const isMember = card.member_ids.includes(me.id);
+  const toggleMember = (id) => run(() => (card.member_ids.includes(id) ? api.del(`/cards/${card.id}/members/${id}`) : api.put(`/cards/${card.id}/members/${id}`)));
 
   const upload = (files) => run(async () => { for (const f of files) await api.upload(`/cards/${card.id}/attachments`, f); });
 
@@ -52,31 +58,48 @@ export default function CardModal({ cardId, labels, onChanged, onClose }) {
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}
         onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length) upload([...e.dataTransfer.files]); }}>
+        onDrop={(e) => { e.preventDefault(); if (canEdit && e.dataTransfer.files.length) upload([...e.dataTransfer.files]); }}>
         <div className="modal-top">
           <span className="list-pill">{card.list_name}</span>
           <div className="spacer" />
-          <Menu items={[
+          {canEdit && <Menu items={[
             { label: 'Archive card', onClick: async () => { await patchCard({ archived: true }); onClose(); } },
             { label: 'Delete card', danger: true, onClick: async () => { if (confirm('Delete this card permanently?')) { await api.del(`/cards/${card.id}`); onChanged(); onClose(); } } },
-          ]} />
+          ]} />}
           <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        {card.archived ? <div className="archived-banner">This card is archived. <button className="btn" onClick={() => patchCard({ archived: false })}>Restore</button></div> : null}
+        {card.archived ? <div className="archived-banner">This card is archived. {canEdit && <button className="btn" onClick={() => patchCard({ archived: false })}>Restore</button>}</div> : null}
 
         <div className="modal-body">
           <div className="modal-main">
             <div className="modal-title-row">
-              <CompleteCircle done={!!card.completed} onToggle={() => patchCard({ completed: !card.completed })} size={22} />
-              <InlineEdit value={card.title} onSave={(title) => patchCard({ title })} className="modal-title" multiline />
+              {canEdit ? <CompleteCircle done={!!card.completed} onToggle={() => patchCard({ completed: !card.completed })} size={22} />
+                : card.completed ? <span className="done-mark big">✓</span> : null}
+              <InlineEdit value={card.title} onSave={(title) => patchCard({ title })} className="modal-title" multiline readOnly={!canEdit} />
             </div>
 
-            <div className="action-row">
+            {canEdit && <div className="action-row">
+              {!isMember && <button className="btn" onClick={() => toggleMember(me.id)}>🙋 Join</button>}
+              <button className="btn" onClick={() => setPop('members')}>👤 Members</button>
               <button className="btn" onClick={() => setPop('labels')}>🏷 Labels</button>
               <button className="btn" onClick={() => setPop('dates')}>🕑 Dates</button>
               <button className="btn" onClick={() => setPop('checklist')}>☑ Checklist</button>
               <button className="btn" onClick={() => fileRef.current?.click()}>📎 Attachment</button>
               <input ref={fileRef} type="file" multiple hidden onChange={(e) => { upload([...e.target.files]); e.target.value = ''; }} />
+              {pop === 'members' && (
+                <Popover title="Members" onClose={() => setPop(null)}>
+                  <div className="member-options">
+                    {people.map((p) => (
+                      <label key={p.id} className="member-option">
+                        <input type="checkbox" checked={card.member_ids.includes(p.id)} onChange={() => toggleMember(p.id)} />
+                        <Avatar user={p} size={28} />
+                        <span className="grow">{p.display_name}{p.id === me.id ? ' (you)' : ''}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="muted small">Only people the board is shared with can be added.</p>
+                </Popover>
+              )}
               {pop === 'labels' && <LabelsPopover card={card} labels={labels} run={run} onClose={() => setPop(null)} />}
               {pop === 'dates' && <DatesPopover card={card} onSave={(b) => { setPop(null); patchCard(b); }} onClose={() => setPop(null)} />}
               {pop === 'checklist' && (
@@ -84,23 +107,32 @@ export default function CardModal({ cardId, labels, onChanged, onClose }) {
                   <ChecklistForm onAdd={(title, due_date) => { setPop(null); run(() => api.post(`/cards/${card.id}/checklists`, { title, due_date })); }} />
                 </Popover>
               )}
-            </div>
+            </div>}
 
-            {(cardLabels.length > 0 || card.start_date || card.due_date) && (
+            {(members.length > 0 || cardLabels.length > 0 || card.start_date || card.due_date) && (
               <div className="meta-row">
+                {members.length > 0 && (
+                  <div className="meta">
+                    <h5>Members</h5>
+                    <div className="chips">
+                      {members.map((m) => <Avatar key={m.id} user={m} size={32} />)}
+                      {canEdit && <button className="btn square round" onClick={() => setPop('members')} aria-label="Edit members">+</button>}
+                    </div>
+                  </div>
+                )}
                 {cardLabels.length > 0 && (
                   <div className="meta">
                     <h5>Labels</h5>
                     <div className="chips">
                       {cardLabels.map((l) => <span key={l.id} className="label-chip big" style={{ background: l.color }}>{l.name}</span>)}
-                      <button className="btn square" onClick={() => setPop('labels')}>+</button>
+                      {canEdit && <button className="btn square" onClick={() => setPop('labels')}>+</button>}
                     </div>
                   </div>
                 )}
                 {(card.start_date || card.due_date) && (
                   <div className="meta">
                     <h5>{card.start_date && card.due_date ? 'Dates' : card.due_date ? 'Due date' : 'Start date'}</h5>
-                    <button className={`btn date-btn ${due}`} onClick={() => setPop('dates')}>
+                    <button className={`btn date-btn ${due}`} onClick={() => canEdit && setPop('dates')}>
                       {card.start_date && formatDate(card.start_date, { withTime: false })}
                       {card.start_date && card.due_date && ' – '}
                       {card.due_date && formatDate(card.due_date)}
@@ -113,13 +145,13 @@ export default function CardModal({ cardId, labels, onChanged, onClose }) {
               </div>
             )}
 
-            <Description value={card.description} onSave={(description) => patchCard({ description })} />
+            <Description value={card.description} onSave={(description) => patchCard({ description })} readOnly={!canEdit} />
 
             {attachments.length > 0 && (
               <section className="section">
                 <div className="section-head">
                   <h4>📎 Attachments</h4>
-                  <button className="btn" onClick={() => fileRef.current?.click()}>Add</button>
+                  {canEdit && <button className="btn" onClick={() => fileRef.current?.click()}>Add</button>}
                 </div>
                 {attachments.map((a) => (
                   <div key={a.id} className="attachment">
@@ -130,13 +162,13 @@ export default function CardModal({ cardId, labels, onChanged, onClose }) {
                       <a href={apiUrl(`/attachments/${a.id}`)} className="att-name">{a.filename}</a>
                       <span className="muted">{formatSize(a.size)} · added {timeAgo(a.created_at)}</span>
                     </div>
-                    <button className="btn danger subtle" onClick={() => confirm(`Delete ${a.filename}?`) && run(() => api.del(`/attachments/${a.id}`))}>Delete</button>
+                    {canEdit && <button className="btn danger subtle" onClick={() => confirm(`Delete ${a.filename}?`) && run(() => api.del(`/attachments/${a.id}`))}>Delete</button>}
                   </div>
                 ))}
               </section>
             )}
 
-            {checklists.map((cl) => <Checklist key={cl.id} checklist={cl} run={run} />)}
+            {checklists.map((cl) => <Checklist key={cl.id} checklist={cl} run={run} readOnly={!canEdit} />)}
           </div>
 
           <aside className="modal-side">
@@ -154,12 +186,20 @@ function formatSize(n) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function Description({ value, onSave }) {
+function Description({ value, onSave, readOnly }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [tab, setTab] = useState('write');
   useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
   const cancel = () => { setDraft(value); setEditing(false); setTab('write'); };
+  if (readOnly) {
+    return (
+      <section className="section">
+        <div className="section-head"><h4>≡ Description</h4></div>
+        {value ? <Markdown>{value}</Markdown> : <p className="muted">No description.</p>}
+      </section>
+    );
+  }
   return (
     <section className="section">
       <div className="section-head">
@@ -293,7 +333,9 @@ function ChecklistForm({ onAdd }) {
   );
 }
 
-function Checklist({ checklist, run }) {
+function Checklist({ checklist, run, readOnly }) {
+  // Viewers see due dates as plain badges; only editors open the date pickers.
+  const editDate = (id) => !readOnly && setDateFor(id);
   const [hideDone, setHideDone] = useState(false);
   const [dateFor, setDateFor] = useState(null);
   const total = checklist.items.length;
@@ -304,13 +346,13 @@ function Checklist({ checklist, run }) {
   return (
     <section className="section checklist">
       <div className="section-head">
-        <h4>☑ <InlineEdit value={checklist.title} onSave={(title) => run(() => api.patch(`/checklists/${checklist.id}`, { title }))} /></h4>
+        <h4>☑ <InlineEdit value={checklist.title} onSave={(title) => run(() => api.patch(`/checklists/${checklist.id}`, { title }))} readOnly={readOnly} /></h4>
         <div className="row">
           {checklist.due_date
-            ? <button className={`badge ${listDue}`} onClick={() => setDateFor('list')} title="Checklist due date">🕑 Due {formatDate(checklist.due_date)}</button>
-            : <button className="icon-btn" onClick={() => setDateFor('list')} title="Set checklist due date" aria-label="Set checklist due date">🕑</button>}
+            ? <button className={`badge ${listDue}`} onClick={() => editDate('list')} title="Checklist due date">🕑 Due {formatDate(checklist.due_date)}</button>
+            : !readOnly && <button className="icon-btn" onClick={() => editDate('list')} title="Set checklist due date" aria-label="Set checklist due date">🕑</button>}
           {done > 0 && <button className="btn" onClick={() => setHideDone((h) => !h)}>{hideDone ? `Show checked items (${done})` : 'Hide checked items'}</button>}
-          <button className="btn" onClick={() => confirm(`Delete checklist "${checklist.title}"?`) && run(() => api.del(`/checklists/${checklist.id}`))}>Delete</button>
+          {!readOnly && <button className="btn" onClick={() => confirm(`Delete checklist "${checklist.title}"?`) && run(() => api.del(`/checklists/${checklist.id}`))}>Delete</button>}
         </div>
       </div>
       {dateFor === 'list' && (
@@ -327,13 +369,13 @@ function Checklist({ checklist, run }) {
           const st = dueStatus(it.due_date, it.done);
           return (
             <li key={it.id} className={it.done ? 'done' : ''}>
-              <input type="checkbox" checked={!!it.done} onChange={() => run(() => api.patch(`/items/${it.id}`, { done: !it.done }))} />
-              <InlineEdit value={it.text} onSave={(text) => run(() => api.patch(`/items/${it.id}`, { text }))} className="item-text" />
-              {it.due_date && <button className={`badge ${st}`} onClick={() => setDateFor(it.id)}>🕑 {formatDate(it.due_date)}</button>}
-              <div className="item-actions">
+              <input type="checkbox" checked={!!it.done} disabled={readOnly} onChange={() => run(() => api.patch(`/items/${it.id}`, { done: !it.done }))} />
+              <InlineEdit value={it.text} onSave={(text) => run(() => api.patch(`/items/${it.id}`, { text }))} className="item-text" readOnly={readOnly} />
+              {it.due_date && <button className={`badge ${st}`} onClick={() => editDate(it.id)}>🕑 {formatDate(it.due_date)}</button>}
+              {!readOnly && <div className="item-actions">
                 {!it.due_date && <button className="icon-btn" title="Set due date" onClick={() => setDateFor(it.id)}>🕑</button>}
                 <button className="icon-btn" title="Delete item" onClick={() => run(() => api.del(`/items/${it.id}`))}>🗑</button>
-              </div>
+              </div>}
               {dateFor === it.id && (
                 <Popover title="Item due date" onClose={() => setDateFor(null)} className="item-pop">
                   <ItemDate value={it.due_date} onSave={(v) => { setDateFor(null); run(() => api.patch(`/items/${it.id}`, { due_date: v })); }} />
@@ -343,8 +385,8 @@ function Checklist({ checklist, run }) {
           );
         })}
       </ul>
-      <Composer openLabel="Add an item" className="btn" placeholder="Add an item" buttonLabel="Add"
-        onAdd={(text) => run(() => api.post(`/checklists/${checklist.id}/items`, { text }))} />
+      {!readOnly && <Composer openLabel="Add an item" className="btn" placeholder="Add an item" buttonLabel="Add"
+        onAdd={(text) => run(() => api.post(`/checklists/${checklist.id}/items`, { text }))} />}
     </section>
   );
 }
@@ -363,7 +405,7 @@ function ItemDate({ value, onSave }) {
 }
 
 function CommentsAndActivity({ card, comments, activity, run }) {
-  const { displayName } = useSettings();
+  const { user: me } = useAuth();
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
@@ -378,7 +420,6 @@ function CommentsAndActivity({ card, comments, activity, run }) {
     ...comments.map((c) => ({ ...c, kind: 'comment' })),
     ...(showDetails ? activity.map((a) => ({ ...a, kind: 'activity' })) : []),
   ].sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const me = displayName || 'Someone';
 
   return (
     <>
@@ -387,7 +428,7 @@ function CommentsAndActivity({ card, comments, activity, run }) {
         <button className="btn" onClick={() => setShowDetails((s) => !s)}>{showDetails ? 'Hide details' : 'Show details'}</button>
       </div>
       <div className="comment-box">
-        <Avatar name={me} />
+        <Avatar user={me} />
         <div className="grow">
           <textarea placeholder="Write a comment…" rows={focused || text ? 3 : 1} value={text}
             onFocus={() => setFocused(true)} onChange={(e) => setText(e.target.value)}
@@ -398,40 +439,36 @@ function CommentsAndActivity({ card, comments, activity, run }) {
           {(focused || text) && (
             <div className="row">
               <button className="btn primary" disabled={!text.trim()} onClick={submit}>Save</button>
-              {!displayName && <span className="muted hint">Set your name in <a href="#/settings">Settings</a></span>}
             </div>
           )}
         </div>
       </div>
       <ul className="feed">
-        {feed.map((f) => (
+        {feed.map((f) => {
+          const who = userById(f.user_id);
+          const name = who?.display_name || (f.kind === 'comment' ? f.author : f.actor);
+          const canDelete = f.kind === 'comment' && (f.user_id === me?.id || me?.role === 'admin');
+          return (
           <li key={f.id} className={f.kind}>
-            <Avatar name={f.kind === 'comment' ? f.author : f.actor} />
+            <Avatar user={who} name={name} />
             <div className="grow">
               {f.kind === 'comment' ? (
                 <>
-                  <div><b>{f.author}</b> <span className="muted">{timeAgo(f.created_at)}</span></div>
+                  <div><b>{name}</b> <span className="muted">{timeAgo(f.created_at)}</span></div>
                   <div className="comment-body"><Markdown>{f.body}</Markdown></div>
-                  <button className="link-btn small" onClick={() => confirm('Delete this comment?') && run(() => api.del(`/comments/${f.id}`))}>Delete</button>
+                  {canDelete && <button className="link-btn small" onClick={() => confirm('Delete this comment?') && run(() => api.del(`/comments/${f.id}`))}>Delete</button>}
                 </>
               ) : (
                 <>
-                  <div><b>{f.actor}</b> {f.text}</div>
+                  <div><b>{name}</b> {f.text}</div>
                   <div className="muted small">{timeAgo(f.created_at)}</div>
                 </>
               )}
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </>
   );
-}
-
-const AVATAR_COLORS = ['#c2410c', '#0369a1', '#15803d', '#7e22ce', '#b91c1c', '#0f766e', '#a16207', '#4338ca'];
-export function Avatar({ name }) {
-  const initials = (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0].toUpperCase()).join('') || '?';
-  let h = 0;
-  for (const ch of name || '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return <span className="avatar" style={{ background: AVATAR_COLORS[h % AVATAR_COLORS.length] }} title={name}>{initials}</span>;
 }

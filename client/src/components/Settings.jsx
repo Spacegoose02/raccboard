@@ -4,12 +4,16 @@ import { APP_MASCOT, APP_NAME, COLORS, IS_NATIVE, THEMES } from '../config.js';
 import { navigate } from '../router.js';
 import { updateSettings, useSettings } from '../settings.js';
 import { ServerForm } from './ServerSetup.jsx';
-import { Avatar } from './CardModal.jsx';
-import { ColorPicker } from './ui.jsx';
+import { Avatar, RACCOONS, RaccoonFace } from './Avatar.jsx';
+import { ColorPicker, Menu } from './ui.jsx';
+import { loadUsers, setCurrentUser, signOut, useAuth } from '../auth.js';
+import { SharePanel } from './Share.jsx';
 
 // Every setting lives on this one page, grouped into sections.
 const SECTIONS = [
   { id: 'profile', label: 'Profile' },
+  { id: 'users', label: 'Users', admin: true },
+  { id: 'teams', label: 'Teams & families' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'boards', label: 'Boards & labels' },
   IS_NATIVE && { id: 'server', label: 'Server' },
@@ -17,6 +21,8 @@ const SECTIONS = [
 ].filter(Boolean);
 
 export default function Settings({ boardId }) {
+  const { user } = useAuth();
+  const sections = SECTIONS.filter((s) => !s.admin || user?.role === 'admin');
   const refs = useRef({});
   const scrollTo = (id) => refs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   useEffect(() => { if (boardId) setTimeout(() => scrollTo('boards'), 50); }, [boardId]);
@@ -27,10 +33,12 @@ export default function Settings({ boardId }) {
       <h2>Settings</h2>
       <div className="settings-layout">
         <nav className="settings-nav">
-          {SECTIONS.map((s) => <button key={s.id} onClick={() => scrollTo(s.id)}>{s.label}</button>)}
+          {sections.map((s) => <button key={s.id} onClick={() => scrollTo(s.id)}>{s.label}</button>)}
         </nav>
         <div className="settings-body">
           <section className="panel" ref={section('profile')}><ProfileSettings /></section>
+          {user?.role === 'admin' && <section className="panel" ref={section('users')}><UsersSettings /></section>}
+          <section className="panel" ref={section('teams')}><TeamsSettings /></section>
           <section className="panel" ref={section('appearance')}><ThemeSettings /></section>
           <section className="panel" ref={section('boards')}><BoardSettings initialBoardId={boardId} /></section>
           {IS_NATIVE && (
@@ -51,20 +59,137 @@ export default function Settings({ boardId }) {
 }
 
 function ProfileSettings() {
-  const settings = useSettings();
-  const [name, setName] = useState(settings.displayName);
-  const [saved, setSaved] = useState(false);
-  const saveName = () => { updateSettings({ displayName: name.trim() }); setSaved(true); setTimeout(() => setSaved(false), 1500); };
+  const { user } = useAuth();
+  const [form, setForm] = useState({ display_name: user.display_name, email: user.email });
+  const [pw, setPw] = useState({ current_password: '', new_password: '', confirm: '' });
+  const [msg, setMsg] = useState({ profile: '', password: '', avatar: '' });
+  const fileRef = useRef(null);
+  const note = (k, v) => setMsg((m) => ({ ...m, [k]: v }));
+  const save = async (body, key, done = 'Saved ✓') => {
+    try { setCurrentUser(await api.patch('/auth/me', body)); note(key, done); return true; } catch (e) { note(key, e.message); return false; }
+  };
+  const savePassword = async () => {
+    if (pw.new_password !== pw.confirm) { note('password', 'New passwords do not match'); return; }
+    const ok = await save({ current_password: pw.current_password, new_password: pw.new_password }, 'password', 'Password changed ✓ Other devices were signed out.');
+    if (ok) setPw({ current_password: '', new_password: '', confirm: '' });
+  };
+  const uploadPhoto = async (file) => {
+    if (!file) return;
+    try { setCurrentUser(await api.upload('/auth/me/photo', file, 'photo')); note('avatar', 'Photo saved ✓'); } catch (e) { note('avatar', e.message); }
+  };
+  const pick = (avatar) => save({ avatar }, 'avatar', 'Avatar saved ✓');
+
   return (
     <>
-      <h3>Your name</h3>
-      <p className="muted">Shown on your comments and in card activity. Saved in this browser only until accounts arrive.</p>
+      <h3>Profile</h3>
+      <div className="profile-head">
+        <Avatar user={user} size={64} />
+        <div>
+          <div className="profile-name">{user.display_name}</div>
+          <div className="muted">@{user.username}{user.role === 'admin' ? ' · admin' : ''}{user.oidc ? ' · single sign-on' : ''}</div>
+        </div>
+        <div className="spacer" />
+        <button className="btn" onClick={signOut}>Sign out</button>
+      </div>
+
+      <h4>Avatar</h4>
+      <div className="avatar-grid">
+        {RACCOONS.map((_, i) => (
+          <button key={i} className={`avatar-choice ${user.avatar === `raccoon:${i}` ? 'selected' : ''}`} onClick={() => pick(`raccoon:${i}`)} aria-label={`Raccoon ${i + 1}`}>
+            <RaccoonFace index={i} size={48} />
+          </button>
+        ))}
+        <button className={`avatar-choice text ${!user.avatar ? 'selected' : ''}`} onClick={() => pick('')}>Initials</button>
+        <button className={`avatar-choice text ${user.avatar.startsWith('photo:') ? 'selected' : ''}`} onClick={() => fileRef.current?.click()}>Upload photo</button>
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { uploadPhoto(e.target.files[0]); e.target.value = ''; }} />
+      </div>
+      {msg.avatar && <p className="muted small">{msg.avatar}</p>}
+
+      <h4>Details</h4>
+      <div className="form-grid">
+        <label className="field">Display name<input value={form.display_name} maxLength={60} onChange={(e) => setForm({ ...form, display_name: e.target.value })} /></label>
+        <label className="field">Email<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+      </div>
       <div className="row">
-        <Avatar name={name || 'Someone'} />
-        <input value={name} placeholder="e.g. Rocky Raccoon" maxLength={60} onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && saveName()} />
-        <button className="btn primary" onClick={saveName}>Save</button>
-        {saved && <span className="muted">Saved ✓</span>}
+        <button className="btn primary" onClick={() => save(form, 'profile')}>Save details</button>
+        {msg.profile && <span className="muted small">{msg.profile}</span>}
+      </div>
+
+      <h4>{user.has_password ? 'Change password' : 'Set a password'}</h4>
+      {!user.has_password && <p className="muted small">You sign in with single sign-on. A password also lets you sign in from the Android app.</p>}
+      <div className="form-grid">
+        {user.has_password && (
+          <label className="field">Current password
+            <input type="password" autoComplete="current-password" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password: e.target.value })} />
+          </label>
+        )}
+        <label className="field">New password
+          <input type="password" autoComplete="new-password" minLength={8} value={pw.new_password} onChange={(e) => setPw({ ...pw, new_password: e.target.value })} />
+        </label>
+        <label className="field">Confirm new password
+          <input type="password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} />
+        </label>
+      </div>
+      <div className="row">
+        <button className="btn" disabled={!pw.new_password} onClick={savePassword}>{user.has_password ? 'Change password' : 'Set password'}</button>
+        {msg.password && <span className="muted small">{msg.password}</span>}
+      </div>
+    </>
+  );
+}
+
+function UsersSettings() {
+  const { user: me, users } = useAuth();
+  const empty = { username: '', display_name: '', password: '', role: 'user' };
+  const [form, setForm] = useState(empty);
+  const [msg, setMsg] = useState('');
+  const act = async (fn, ok = '') => {
+    try { await fn(); setMsg(ok); } catch (e) { setMsg(e.message); }
+    loadUsers();
+  };
+  const add = () => act(async () => { await api.post('/users', form); setForm(empty); }, `Added ${form.username} ✓`);
+  const resetPassword = (u) => {
+    const p = prompt(`New password for ${u.username} (8+ characters):`);
+    if (p) act(() => api.patch(`/users/${u.id}`, { password: p }), 'Password reset ✓ They were signed out everywhere.');
+  };
+
+  return (
+    <>
+      <h3>Users</h3>
+      <p className="muted">Everyone who can sign in. Admins add people, reset passwords and manage roles.</p>
+      <div className="user-list">
+        {users.map((u) => (
+          <div key={u.id} className="user-row">
+            <Avatar user={u} size={36} />
+            <div className="grow">
+              <div><b>{u.display_name}</b> <span className="muted">@{u.username}</span></div>
+              <div className="muted small">{u.role}{u.oidc ? ' · single sign-on' : ''}{u.email ? ` · ${u.email}` : ''}</div>
+            </div>
+            {u.id !== me.id && (
+              <Menu items={[
+                { label: u.role === 'admin' ? 'Make regular user' : 'Make admin', onClick: () => act(() => api.patch(`/users/${u.id}`, { role: u.role === 'admin' ? 'user' : 'admin' })) },
+                { label: 'Reset password', onClick: () => resetPassword(u) },
+                { label: 'Delete user', danger: true, onClick: () => confirm(`Delete ${u.display_name}? Their comments stay, unlinked from the account.`) && act(() => api.del(`/users/${u.id}`)) },
+              ]} />
+            )}
+          </div>
+        ))}
+      </div>
+      <h4>Add a user</h4>
+      <div className="form-grid">
+        <label className="field">Username<input autoCapitalize="off" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></label>
+        <label className="field">Display name<input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} /></label>
+        <label className="field">Temporary password<input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
+        <label className="field">Role
+          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+      </div>
+      <div className="row">
+        <button className="btn primary" disabled={!form.username || !form.password} onClick={add}>Add user</button>
+        {msg && <span className="muted small">{msg}</span>}
       </div>
     </>
   );
@@ -102,7 +227,8 @@ function BoardSettings({ initialBoardId }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
 
-  const loadBoards = useCallback(() => api.get('/boards').then((b) => {
+  const loadBoards = useCallback(() => api.get('/boards').then((all) => {
+    const b = all.filter((x) => x.my_role === 'owner');
     setBoards(b);
     setSelected((cur) => (cur && b.some((x) => x.id === cur) ? cur : b[0]?.id || ''));
   }).catch((e) => setError(e.message)), []);
@@ -121,7 +247,7 @@ function BoardSettings({ initialBoardId }) {
 
   if (error) return <><h3>Boards & labels</h3><p className="error">{error}</p></>;
   if (!boards) return <><h3>Boards & labels</h3><p className="muted">Loading…</p></>;
-  if (!boards.length) return <><h3>Boards & labels</h3><p className="muted">No boards yet. <a href="#/">Create one</a>.</p></>;
+  if (!boards.length) return <><h3>Boards & labels</h3><p className="muted">You don't own any boards yet. <a href="#/">Create one</a>.</p></>;
 
   const board = detail?.board;
   const status = (b) => (b.archived ? ' (archived)' : b.completed_at ? ' (completed)' : '');
@@ -136,6 +262,9 @@ function BoardSettings({ initialBoardId }) {
       {board && board.id === selected && (
         <div className="stack board-settings">
           <BoardNameColor key={board.id} board={board} onSave={(patch) => act(() => api.patch(`/boards/${board.id}`, patch))} />
+
+          <h4>Sharing</h4>
+          <SharePanel key={board.id} boardId={board.id} />
 
           <h4>Labels (statuses)</h4>
           <div className="label-editor">
@@ -212,5 +341,79 @@ function NewLabel({ onAdd }) {
       </div>
       <ColorPicker colors={COLORS} value={color} onChange={setColor} />
     </div>
+  );
+}
+
+function TeamsSettings() {
+  const { user: me, users } = useAuth();
+  const [teams, setTeams] = useState(null);
+  const [name, setName] = useState('');
+  const [msg, setMsg] = useState('');
+  const load = useCallback(() => api.get('/teams').then(setTeams).catch((e) => setMsg(e.message)), []);
+  useEffect(() => { load(); }, [load]);
+  const act = async (fn) => {
+    setMsg('');
+    try { await fn(); } catch (e) { setMsg(e.message); }
+    load();
+  };
+  const create = () => { if (name.trim()) { act(() => api.post('/teams', { name })); setName(''); } };
+
+  return (
+    <>
+      <h3>Teams & families</h3>
+      <p className="muted">Group people (a household, a family, a project crew) and share boards with the whole group at once from a board's Share button.</p>
+      {msg && <p className="error">{msg}</p>}
+      {teams?.map((t) => {
+        const myRole = t.members.find((m) => m.id === me.id)?.team_role;
+        const manage = myRole === 'owner' || me.role === 'admin';
+        const memberIds = new Set(t.members.map((m) => m.id));
+        return (
+          <div key={t.id} className="team-card">
+            <div className="row spread">
+              <InlineTeamName team={t} editable={manage} onSave={(n) => act(() => api.patch(`/teams/${t.id}`, { name: n }))} />
+              {manage
+                ? <button className="btn danger subtle" onClick={() => confirm(`Delete team "${t.name}"? Boards shared with it lose that access.`) && act(() => api.del(`/teams/${t.id}`))}>Delete team</button>
+                : <button className="btn subtle" onClick={() => confirm(`Leave "${t.name}"?`) && act(() => api.del(`/teams/${t.id}/members/${me.id}`))}>Leave</button>}
+            </div>
+            <div className="team-members">
+              {t.members.map((m) => (
+                <div key={m.id} className="user-row">
+                  <Avatar user={m} size={30} />
+                  <div className="grow"><b>{m.display_name}</b>{m.id === me.id ? ' (you)' : ''} <span className="muted small">{m.team_role === 'owner' ? '· owner' : ''}</span></div>
+                  {manage && m.id !== me.id && (
+                    <Menu items={[
+                      { label: m.team_role === 'owner' ? 'Make member' : 'Make owner', onClick: () => act(() => api.put(`/teams/${t.id}/members/${m.id}`, { role: m.team_role === 'owner' ? 'member' : 'owner' })) },
+                      { label: 'Remove from team', danger: true, onClick: () => act(() => api.del(`/teams/${t.id}/members/${m.id}`)) },
+                    ]} />
+                  )}
+                </div>
+              ))}
+            </div>
+            {manage && (
+              <select value="" onChange={(e) => e.target.value && act(() => api.put(`/teams/${t.id}/members/${e.target.value}`))} aria-label="Add someone">
+                <option value="">+ Add someone…</option>
+                {users.filter((u) => !memberIds.has(u.id)).map((u) => <option key={u.id} value={u.id}>{u.display_name} (@{u.username})</option>)}
+              </select>
+            )}
+          </div>
+        );
+      })}
+      {teams?.length === 0 && <p className="muted small">No teams yet.</p>}
+      <div className="row">
+        <input placeholder="New team name, e.g. The Smiths" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} />
+        <button className="btn primary" disabled={!name.trim()} onClick={create}>Create team</button>
+      </div>
+    </>
+  );
+}
+
+function InlineTeamName({ team, editable, onSave }) {
+  const [name, setName] = useState(team.name);
+  if (!editable) return <b className="team-name">👪 {team.name}</b>;
+  return (
+    <span className="row team-name">👪
+      <input value={name} maxLength={80} onChange={(e) => setName(e.target.value)}
+        onBlur={() => name.trim() && name !== team.name && onSave(name)} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()} />
+    </span>
   );
 }

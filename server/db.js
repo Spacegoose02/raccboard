@@ -103,6 +103,66 @@ const migrations = [
   `,
   // v2: due dates on checklists (sublists)
   'ALTER TABLE checklists ADD COLUMN due_date TEXT;',
+  // v3: accounts and sessions; comments/activity remember who wrote them
+  `
+  CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    display_name TEXT NOT NULL,
+    email TEXT,
+    password_hash TEXT,
+    avatar TEXT,
+    role TEXT NOT NULL DEFAULT 'user',
+    oidc_issuer TEXT,
+    oidc_sub TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX idx_users_oidc ON users(oidc_issuer, oidc_sub) WHERE oidc_sub IS NOT NULL;
+  CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    user_agent TEXT
+  );
+  CREATE INDEX idx_sessions_user ON sessions(user_id);
+  ALTER TABLE comments ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE activity ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+  `,
+  // v4: board owners, teams/families, board sharing and card members
+  `
+  ALTER TABLE boards ADD COLUMN owner_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+  UPDATE boards SET owner_id = (SELECT id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1);
+  CREATE TABLE teams (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE team_members (
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'member',
+    PRIMARY KEY (team_id, user_id)
+  );
+  CREATE TABLE board_shares (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    CHECK ((user_id IS NULL) != (team_id IS NULL))
+  );
+  CREATE UNIQUE INDEX idx_shares_user ON board_shares(board_id, user_id) WHERE user_id IS NOT NULL;
+  CREATE UNIQUE INDEX idx_shares_team ON board_shares(board_id, team_id) WHERE team_id IS NOT NULL;
+  CREATE TABLE card_members (
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (card_id, user_id)
+  );
+  CREATE INDEX idx_card_members_user ON card_members(user_id);
+  `,
 ];
 
 function migrate() {
@@ -123,7 +183,8 @@ export const DEFAULT_LABELS = [
   { name: 'Done', color: '#22c55e' },
 ];
 
-export function logActivity(boardId, cardId, actor, text) {
-  db.prepare('INSERT INTO activity (id, board_id, card_id, actor, text, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(uuid(), boardId, cardId, actor, text, now());
+// who: { name, id } of the signed-in user
+export function logActivity(boardId, cardId, who, text) {
+  db.prepare('INSERT INTO activity (id, board_id, card_id, actor, user_id, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(uuid(), boardId, cardId, who.name, who.id || null, text, now());
 }

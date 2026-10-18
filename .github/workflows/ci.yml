@@ -21,6 +21,7 @@ jobs:
           DATA_DIR="$RUNNER_TEMP/data" PORT=3000 npm start > server.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && break; sleep 1; done
       - run: npm run smoke
+      - run: npm run smoke:oidc
       - name: Server log
         if: always()
         run: cat server.log

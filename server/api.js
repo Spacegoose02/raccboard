@@ -3,27 +3,30 @@ import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, uuid, now, logActivity, DEFAULT_LABELS, UPLOAD_DIR } from './db.js';
+import { authRouter, publicUser, requireUser } from './auth.js';
+import { assertBoard, boardRole, boardUsers, VISIBLE_BOARDS_SQL, visibleParams, withRequest } from './access.js';
+import { sharingRouter } from './sharing.js';
 
 export const api = express.Router();
 // The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
-// CORS_ORIGIN can narrow this; tighten further once accounts land in Phase 2.
+// It authenticates with a Bearer token, never cookies, so a wildcard origin is safe.
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 api.use((req, res, next) => {
   res.set('Access-Control-Allow-Origin', CORS_ORIGIN);
-  res.set('Access-Control-Allow-Headers', 'Content-Type, X-User');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
 api.use(express.json({ limit: '2mb' }));
 
-// Display name from the client (Settings page). Accounts arrive in Phase 2.
-api.use((req, _res, next) => {
-  let name = req.get('X-User') || '';
-  try { name = decodeURIComponent(name); } catch { /* keep raw */ }
-  req.actor = name.trim().slice(0, 60) || 'Someone';
-  next();
-});
+api.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Sign-in, profiles and user admin. Everything after requireUser needs a session.
+api.use(authRouter);
+api.use(requireUser);
+api.use(withRequest);
+api.use(sharingRouter);
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -44,32 +47,38 @@ function patch(table, id, body, fields) {
   db.prepare(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id);
 }
 
-const getBoard = (id) => db.prepare('SELECT * FROM boards WHERE id = ?').get(id) || notFound('Board');
-const getList = (id) => db.prepare('SELECT * FROM lists WHERE id = ?').get(id) || notFound('List');
-const getCard = (id) =>
-  db.prepare('SELECT c.*, l.board_id FROM cards c JOIN lists l ON l.id = c.list_id WHERE c.id = ?').get(id) || notFound('Card');
-const getChecklist = (id) =>
-  db.prepare(`SELECT cl.*, l.board_id FROM checklists cl JOIN cards c ON c.id = cl.card_id
-              JOIN lists l ON l.id = c.list_id WHERE cl.id = ?`).get(id) || notFound('Checklist');
-const getItem = (id) =>
-  db.prepare(`SELECT i.*, cl.card_id, l.board_id FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id
-              JOIN cards c ON c.id = cl.card_id JOIN lists l ON l.id = c.list_id WHERE i.id = ?`).get(id) || notFound('Item');
+// Every getter checks the current user's access to the row's board (see access.js):
+// reads need viewer, writes need editor, unless a level is given.
+const guard = (row, what, level) => { if (!row) notFound(what); assertBoard(row.board_id, level); return row; };
+const getBoard = (id, level) => { const b = db.prepare('SELECT * FROM boards WHERE id = ?').get(id); if (!b) notFound('Board'); assertBoard(b.id, level); return b; };
+const getList = (id, level) => guard(db.prepare('SELECT * FROM lists WHERE id = ?').get(id), 'List', level);
+const getCard = (id, level) =>
+  guard(db.prepare('SELECT c.*, l.board_id FROM cards c JOIN lists l ON l.id = c.list_id WHERE c.id = ?').get(id), 'Card', level);
+const getChecklist = (id, level) =>
+  guard(db.prepare(`SELECT cl.*, l.board_id FROM checklists cl JOIN cards c ON c.id = cl.card_id
+              JOIN lists l ON l.id = c.list_id WHERE cl.id = ?`).get(id), 'Checklist', level);
+const getItem = (id, level) =>
+  guard(db.prepare(`SELECT i.*, cl.card_id, l.board_id FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id
+              JOIN cards c ON c.id = cl.card_id JOIN lists l ON l.id = c.list_id WHERE i.id = ?`).get(id), 'Item', level);
+const getLabel = (id, level) => guard(db.prepare('SELECT * FROM labels WHERE id = ?').get(id), 'Label', level);
+const getAttachment = (id, level) =>
+  guard(db.prepare(`SELECT a.*, l.board_id FROM attachments a JOIN cards c ON c.id = a.card_id
+              JOIN lists l ON l.id = c.list_id WHERE a.id = ?`).get(id), 'Attachment', level);
 const touchCard = (id) => db.prepare('UPDATE cards SET updated_at = ? WHERE id = ?').run(now(), id);
 const nextPos = (table, col, parent) =>
   (db.prepare(`SELECT MAX(position) AS m FROM ${table} WHERE ${col} = ?`).get(parent).m ?? -1) + 1;
 
-api.get('/health', (_req, res) => res.json({ ok: true }));
-
 /* ---------- Boards ---------- */
 
-api.get('/boards', (_req, res) => {
+api.get('/boards', (req, res) => {
   const boards = db.prepare(`
-    SELECT b.*,
+    SELECT b.*, (SELECT display_name FROM users WHERE id = b.owner_id) AS owner_name,
       (SELECT COUNT(*) FROM cards c JOIN lists l ON l.id = c.list_id
         WHERE l.board_id = b.id AND c.archived = 0 AND l.archived = 0) AS card_count,
       (SELECT COUNT(*) FROM cards c JOIN lists l ON l.id = c.list_id
         WHERE l.board_id = b.id AND c.archived = 0 AND l.archived = 0 AND c.completed = 1) AS done_count
-    FROM boards b ORDER BY b.position, b.created_at`).all();
+    FROM boards b WHERE ${VISIBLE_BOARDS_SQL} ORDER BY b.position, b.created_at`).all(...visibleParams(req.user))
+    .map((b) => ({ ...b, my_role: boardRole(b.id, req.user) }));
   res.json(boards);
 });
 
@@ -77,13 +86,13 @@ api.post('/boards', (req, res) => {
   const name = str(req.body.name, 120) || 'Untitled board';
   const id = uuid();
   db.transaction(() => {
-    db.prepare('INSERT INTO boards (id, name, color, position, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(id, name, str(req.body.color, 32) || null, nextPosAll('boards'), now());
+    db.prepare('INSERT INTO boards (id, name, color, position, created_at, owner_id) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, name, str(req.body.color, 32) || null, nextPosAll('boards'), now(), req.user.id);
     const ins = db.prepare('INSERT INTO labels (id, board_id, name, color) VALUES (?, ?, ?, ?)');
     for (const l of DEFAULT_LABELS) ins.run(uuid(), id, l.name, l.color);
-    logActivity(id, null, req.actor, `created board "${name}"`);
+    logActivity(id, null, req.who, `created board "${name}"`);
   })();
-  res.status(201).json(getBoard(id));
+  res.status(201).json({ ...getBoard(id), my_role: 'owner' });
 });
 function nextPosAll(table) {
   return (db.prepare(`SELECT MAX(position) AS m FROM ${table}`).get().m ?? -1) + 1;
@@ -99,6 +108,7 @@ api.get('/boards/:id', (req, res) => {
       (SELECT COUNT(*) FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id WHERE cl.card_id = c.id) AS check_total,
       (SELECT COUNT(*) FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id WHERE cl.card_id = c.id AND i.done = 1) AS check_done,
       (SELECT json_group_array(label_id) FROM card_labels WHERE card_id = c.id) AS label_ids,
+      (SELECT json_group_array(user_id) FROM card_members WHERE card_id = c.id) AS member_ids,
       (SELECT MIN(d) FROM (
         SELECT i.due_date AS d FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id
           WHERE cl.card_id = c.id AND i.done = 0 AND i.due_date IS NOT NULL
@@ -108,9 +118,67 @@ api.get('/boards/:id', (req, res) => {
     FROM cards c JOIN lists l ON l.id = c.list_id
     WHERE l.board_id = ? AND l.archived = 0 AND c.archived = 0
     ORDER BY c.position`).all(board.id)
-    .map((c) => ({ ...c, label_ids: JSON.parse(c.label_ids) }));
+    .map((c) => ({ ...c, label_ids: JSON.parse(c.label_ids), member_ids: JSON.parse(c.member_ids) }));
   const labels = db.prepare('SELECT * FROM labels WHERE board_id = ? ORDER BY rowid').all(board.id);
-  res.json({ board, lists, cards, labels });
+  const people = boardUsers(board.id).map(publicUser);
+  res.json({ board: { ...board, my_role: boardRole(board.id, req.user) }, lists, cards, labels, people });
+});
+
+/* ---------- Dates (calendar) ---------- */
+
+// Everything with a date on the boards you can see (or one board): cards (with their start date),
+// sublists, checklist items and lists. Query: board, from, to (YYYY-MM-DD, inclusive).
+api.get('/dates', (req, res) => {
+  const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
+  const from = day(req.query.from) || '0000-01-01';
+  const to = day(req.query.to) || '9999-12-31';
+  let scope = `b.archived = 0 AND ${VISIBLE_BOARDS_SQL}`;
+  const params = visibleParams(req.user);
+  if (req.query.board) {
+    assertBoard(String(req.query.board), 'viewer');
+    scope = 'b.id = ?';
+    params.splice(0, params.length, String(req.query.board));
+  }
+  const live = `l.archived = 0 AND ${scope}`;
+  const inRange = (col) => `substr(${col}, 1, 10) BETWEEN ? AND ?`;
+  const rows = [
+    ...db.prepare(`
+      SELECT 'card' AS type, c.id, c.id AS card_id, c.title, c.due_date AS date, c.start_date, c.completed AS done,
+        l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color,
+        (SELECT json_group_array(label_id) FROM card_labels WHERE card_id = c.id) AS label_ids,
+        (SELECT json_group_array(user_id) FROM card_members WHERE card_id = c.id) AS member_ids
+      FROM cards c JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
+      WHERE c.archived = 0 AND ${live} AND c.due_date IS NOT NULL
+        AND substr(COALESCE(c.start_date, c.due_date), 1, 10) <= ? AND substr(c.due_date, 1, 10) >= ?`)
+      .all(...params, to, from),
+    ...db.prepare(`
+      SELECT 'checklist' AS type, cl.id, c.id AS card_id, cl.title || ' · ' || c.title AS title, cl.due_date AS date,
+        NOT EXISTS (SELECT 1 FROM checklist_items i WHERE i.checklist_id = cl.id AND i.done = 0) AS done,
+        l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color
+      FROM checklists cl JOIN cards c ON c.id = cl.card_id JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
+      WHERE c.archived = 0 AND ${live} AND cl.due_date IS NOT NULL AND ${inRange('cl.due_date')}`)
+      .all(...params, from, to),
+    ...db.prepare(`
+      SELECT 'item' AS type, i.id, c.id AS card_id, i.text || ' · ' || c.title AS title, i.due_date AS date, i.done,
+        l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color
+      FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id JOIN cards c ON c.id = cl.card_id
+      JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
+      WHERE c.archived = 0 AND ${live} AND i.due_date IS NOT NULL AND ${inRange('i.due_date')}`)
+      .all(...params, from, to),
+    ...db.prepare(`
+      SELECT 'list' AS type, l.id, NULL AS card_id, l.name AS title, l.due_date AS date, 0 AS done,
+        l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color
+      FROM lists l JOIN boards b ON b.id = l.board_id
+      WHERE ${live} AND l.due_date IS NOT NULL AND ${inRange('l.due_date')}`)
+      .all(...params, from, to),
+  ].map((r) => ({
+    ...r,
+    done: !!r.done,
+    label_ids: r.label_ids ? JSON.parse(r.label_ids) : [],
+    member_ids: r.member_ids ? JSON.parse(r.member_ids) : [],
+  }));
+  rows.sort((a, b) => a.date.localeCompare(b.date));
+  res.json(rows);
 });
 
 api.get('/boards/:id/archived', (req, res) => {
@@ -122,23 +190,23 @@ api.get('/boards/:id/archived', (req, res) => {
 });
 
 api.patch('/boards/:id', (req, res) => {
-  const board = getBoard(req.params.id);
+  const board = getBoard(req.params.id, 'owner');
   const b = req.body;
   db.transaction(() => {
     patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => str(v, 32) || null, archived: bool });
     if ('completed' in b) {
       db.prepare('UPDATE boards SET completed_at = ? WHERE id = ?').run(b.completed ? now() : null, board.id);
-      logActivity(board.id, null, req.actor, b.completed ? 'completed the board' : 'reopened the board');
+      logActivity(board.id, null, req.who, b.completed ? 'completed the board' : 'reopened the board');
     }
     if ('name' in b && str(b.name) && str(b.name) !== board.name) {
-      logActivity(board.id, null, req.actor, `renamed board to "${str(b.name, 120)}"`);
+      logActivity(board.id, null, req.who, `renamed board to "${str(b.name, 120)}"`);
     }
   })();
-  res.json(getBoard(board.id));
+  res.json({ ...getBoard(board.id), my_role: boardRole(board.id, req.user) });
 });
 
 api.delete('/boards/:id', (req, res) => {
-  const board = getBoard(req.params.id);
+  const board = getBoard(req.params.id, 'owner');
   const files = db.prepare(`SELECT a.stored_name FROM attachments a JOIN cards c ON c.id = a.card_id
     JOIN lists l ON l.id = c.list_id WHERE l.board_id = ?`).all(board.id);
   db.prepare('DELETE FROM boards WHERE id = ?').run(board.id);
@@ -154,7 +222,7 @@ api.post('/boards/:id/lists', (req, res) => {
   const name = str(req.body.name, 120) || 'New list';
   db.prepare('INSERT INTO lists (id, board_id, name, position, due_date) VALUES (?, ?, ?, ?, ?)')
     .run(id, board.id, name, nextPos('lists', 'board_id', board.id), dateOrNull(req.body.due_date));
-  logActivity(board.id, null, req.actor, `added list "${name}"`);
+  logActivity(board.id, null, req.who, `added list "${name}"`);
   res.status(201).json(getList(id));
 });
 
@@ -172,7 +240,7 @@ api.patch('/lists/:id', (req, res) => {
     name: (v) => str(v, 120) || list.name, due_date: dateOrNull, collapsed: bool, archived: bool,
   });
   if ('archived' in req.body) {
-    logActivity(list.board_id, null, req.actor, `${req.body.archived ? 'archived' : 'restored'} list "${list.name}"`);
+    logActivity(list.board_id, null, req.who, `${req.body.archived ? 'archived' : 'restored'} list "${list.name}"`);
   }
   res.json(getList(list.id));
 });
@@ -181,7 +249,7 @@ api.patch('/lists/:id', (req, res) => {
 api.post('/lists/:id/archive-cards', (req, res) => {
   const list = getList(req.params.id);
   const r = db.prepare('UPDATE cards SET archived = 1, updated_at = ? WHERE list_id = ? AND archived = 0').run(now(), list.id);
-  if (r.changes) logActivity(list.board_id, null, req.actor, `archived ${r.changes} card${r.changes === 1 ? '' : 's'} in "${list.name}"`);
+  if (r.changes) logActivity(list.board_id, null, req.who, `archived ${r.changes} card${r.changes === 1 ? '' : 's'} in "${list.name}"`);
   res.json({ archived: r.changes });
 });
 
@@ -203,7 +271,7 @@ api.post('/lists/:id/cards', (req, res) => {
   db.transaction(() => {
     db.prepare(`INSERT INTO cards (id, list_id, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .run(id, list.id, title, nextPos('cards', 'list_id', list.id), t, t);
-    logActivity(list.board_id, id, req.actor, `added this card to ${list.name}`);
+    logActivity(list.board_id, id, req.who, `added this card to ${list.name}`);
   })();
   res.status(201).json(getCard(id));
 });
@@ -212,13 +280,14 @@ api.get('/cards/:id', (req, res) => {
   const card = getCard(req.params.id);
   const list = getList(card.list_id);
   const label_ids = db.prepare('SELECT label_id FROM card_labels WHERE card_id = ?').pluck().all(card.id);
+  const member_ids = db.prepare('SELECT user_id FROM card_members WHERE card_id = ?').pluck().all(card.id);
   const checklists = db.prepare('SELECT * FROM checklists WHERE card_id = ? ORDER BY position').all(card.id);
   const items = db.prepare('SELECT * FROM checklist_items WHERE checklist_id = ? ORDER BY position');
   checklists.forEach((cl) => { cl.items = items.all(cl.id); });
   const attachments = db.prepare('SELECT * FROM attachments WHERE card_id = ? ORDER BY created_at DESC').all(card.id);
   const comments = db.prepare('SELECT * FROM comments WHERE card_id = ? ORDER BY created_at DESC').all(card.id);
   const activity = db.prepare('SELECT * FROM activity WHERE card_id = ? ORDER BY created_at DESC LIMIT 200').all(card.id);
-  res.json({ card: { ...card, list_name: list.name, label_ids }, checklists, attachments, comments, activity });
+  res.json({ card: { ...card, list_name: list.name, label_ids, member_ids, my_role: boardRole(card.board_id, req.user) }, checklists, attachments, comments, activity });
 });
 
 api.patch('/cards/:id', (req, res) => {
@@ -231,7 +300,7 @@ api.patch('/cards/:id', (req, res) => {
       start_date: dateOrNull, due_date: dateOrNull, completed: bool, archived: bool,
     });
     touchCard(card.id);
-    const log = (t) => logActivity(card.board_id, card.id, req.actor, t);
+    const log = (t) => logActivity(card.board_id, card.id, req.who, t);
     if ('completed' in b && bool(b.completed) !== card.completed) log(b.completed ? 'marked this card complete' : 'marked this card incomplete');
     if ('archived' in b && bool(b.archived) !== card.archived) log(b.archived ? 'archived this card' : 'restored this card');
     if ('title' in b && str(b.title) && str(b.title, 300) !== card.title) log(`renamed this card to "${str(b.title, 300)}"`);
@@ -257,7 +326,7 @@ api.post('/cards/:id/move', (req, res) => {
     if (target.id !== card.list_id) {
       const from = getList(card.list_id);
       touchCard(card.id);
-      logActivity(card.board_id, card.id, req.actor, `moved this card from ${from.name} to ${target.name}`);
+      logActivity(card.board_id, card.id, req.who, `moved this card from ${from.name} to ${target.name}`);
     }
   })();
   res.json(getCard(card.id));
@@ -282,12 +351,13 @@ api.post('/boards/:id/labels', (req, res) => {
 });
 
 api.patch('/labels/:id', (req, res) => {
-  const label = db.prepare('SELECT * FROM labels WHERE id = ?').get(req.params.id) || notFound('Label');
+  const label = getLabel(req.params.id);
   patch('labels', label.id, req.body, { name: (v) => str(v, 60), color: (v) => str(v, 32) || label.color });
   res.json(db.prepare('SELECT * FROM labels WHERE id = ?').get(label.id));
 });
 
 api.delete('/labels/:id', (req, res) => {
+  getLabel(req.params.id);
   db.prepare('DELETE FROM labels WHERE id = ?').run(req.params.id);
   res.status(204).end();
 });
@@ -296,7 +366,7 @@ api.put('/cards/:id/labels/:labelId', (req, res) => {
   const card = getCard(req.params.id);
   const label = db.prepare('SELECT * FROM labels WHERE id = ? AND board_id = ?').get(req.params.labelId, card.board_id) || notFound('Label');
   const r = db.prepare('INSERT OR IGNORE INTO card_labels (card_id, label_id) VALUES (?, ?)').run(card.id, label.id);
-  if (r.changes) logActivity(card.board_id, card.id, req.actor, `added label "${label.name || label.color}"`);
+  if (r.changes) logActivity(card.board_id, card.id, req.who, `added label "${label.name || label.color}"`);
   res.json({ ok: true });
 });
 
@@ -304,7 +374,26 @@ api.delete('/cards/:id/labels/:labelId', (req, res) => {
   const card = getCard(req.params.id);
   const label = db.prepare('SELECT * FROM labels WHERE id = ?').get(req.params.labelId);
   const r = db.prepare('DELETE FROM card_labels WHERE card_id = ? AND label_id = ?').run(card.id, req.params.labelId);
-  if (r.changes && label) logActivity(card.board_id, card.id, req.actor, `removed label "${label.name || label.color}"`);
+  if (r.changes && label) logActivity(card.board_id, card.id, req.who, `removed label "${label.name || label.color}"`);
+  res.status(204).end();
+});
+
+/* ---------- Card members ---------- */
+
+api.put('/cards/:id/members/:userId', (req, res) => {
+  const card = getCard(req.params.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.userId) || notFound('User');
+  if (!boardRole(card.board_id, user)) throw new HttpError(400, `${user.display_name} can't open this board. Share it with them first.`);
+  const r = db.prepare('INSERT OR IGNORE INTO card_members (card_id, user_id) VALUES (?, ?)').run(card.id, user.id);
+  if (r.changes) logActivity(card.board_id, card.id, req.who, user.id === req.user.id ? 'joined this card' : `added ${user.display_name} to this card`);
+  res.json({ ok: true });
+});
+
+api.delete('/cards/:id/members/:userId', (req, res) => {
+  const card = getCard(req.params.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.userId);
+  const r = db.prepare('DELETE FROM card_members WHERE card_id = ? AND user_id = ?').run(card.id, req.params.userId);
+  if (r.changes && user) logActivity(card.board_id, card.id, req.who, user.id === req.user.id ? 'left this card' : `removed ${user.display_name} from this card`);
   res.status(204).end();
 });
 
@@ -316,7 +405,7 @@ api.post('/cards/:id/checklists', (req, res) => {
   const title = str(req.body.title, 200) || 'Checklist';
   db.prepare('INSERT INTO checklists (id, card_id, title, position, due_date) VALUES (?, ?, ?, ?, ?)')
     .run(id, card.id, title, nextPos('checklists', 'card_id', card.id), dateOrNull(req.body.due_date));
-  logActivity(card.board_id, card.id, req.actor, `added checklist "${title}"`);
+  logActivity(card.board_id, card.id, req.who, `added checklist "${title}"`);
   res.status(201).json({ ...db.prepare('SELECT * FROM checklists WHERE id = ?').get(id), items: [] });
 });
 
@@ -324,7 +413,7 @@ api.patch('/checklists/:id', (req, res) => {
   const cl = getChecklist(req.params.id);
   patch('checklists', cl.id, req.body, { title: (v) => str(v, 200) || cl.title, due_date: dateOrNull });
   if ('due_date' in req.body && dateOrNull(req.body.due_date) !== cl.due_date) {
-    logActivity(cl.board_id, cl.card_id, req.actor, req.body.due_date ? `set "${cl.title}" due ${req.body.due_date}` : `removed the due date from "${cl.title}"`);
+    logActivity(cl.board_id, cl.card_id, req.who, req.body.due_date ? `set "${cl.title}" due ${req.body.due_date}` : `removed the due date from "${cl.title}"`);
   }
   res.json(db.prepare('SELECT * FROM checklists WHERE id = ?').get(cl.id));
 });
@@ -332,7 +421,7 @@ api.patch('/checklists/:id', (req, res) => {
 api.delete('/checklists/:id', (req, res) => {
   const cl = getChecklist(req.params.id);
   db.prepare('DELETE FROM checklists WHERE id = ?').run(cl.id);
-  logActivity(cl.board_id, cl.card_id, req.actor, `removed checklist "${cl.title}"`);
+  logActivity(cl.board_id, cl.card_id, req.who, `removed checklist "${cl.title}"`);
   res.status(204).end();
 });
 
@@ -348,12 +437,13 @@ api.patch('/items/:id', (req, res) => {
   const item = getItem(req.params.id);
   patch('checklist_items', item.id, req.body, { text: (v) => str(v, 500) || item.text, done: bool, due_date: dateOrNull });
   if ('done' in req.body && bool(req.body.done) !== item.done) {
-    logActivity(item.board_id, item.card_id, req.actor, `${req.body.done ? 'completed' : 'unchecked'} "${item.text}"`);
+    logActivity(item.board_id, item.card_id, req.who, `${req.body.done ? 'completed' : 'unchecked'} "${item.text}"`);
   }
   res.json(db.prepare('SELECT * FROM checklist_items WHERE id = ?').get(item.id));
 });
 
 api.delete('/items/:id', (req, res) => {
+  getItem(req.params.id);
   db.prepare('DELETE FROM checklist_items WHERE id = ?').run(req.params.id);
   res.status(204).end();
 });
@@ -381,12 +471,12 @@ api.post('/cards/:id/attachments', upload.single('file'), (req, res) => {
   const id = uuid();
   db.prepare('INSERT INTO attachments (id, card_id, filename, stored_name, mime, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(id, card.id, filename, req.file.filename, req.file.mimetype, req.file.size, now());
-  logActivity(card.board_id, card.id, req.actor, `attached ${filename}`);
+  logActivity(card.board_id, card.id, req.who, `attached ${filename}`);
   res.status(201).json(db.prepare('SELECT * FROM attachments WHERE id = ?').get(id));
 });
 
 api.get('/attachments/:id', (req, res) => {
-  const a = db.prepare('SELECT * FROM attachments WHERE id = ?').get(req.params.id) || notFound('Attachment');
+  const a = getAttachment(req.params.id);
   if (a.mime) res.type(a.mime);
   const disposition = req.query.inline ? 'inline' : 'attachment';
   res.set('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(a.filename)}`);
@@ -394,28 +484,30 @@ api.get('/attachments/:id', (req, res) => {
 });
 
 api.delete('/attachments/:id', (req, res) => {
-  const a = db.prepare(`SELECT a.*, l.board_id FROM attachments a JOIN cards c ON c.id = a.card_id
-    JOIN lists l ON l.id = c.list_id WHERE a.id = ?`).get(req.params.id) || notFound('Attachment');
+  const a = getAttachment(req.params.id);
   db.prepare('DELETE FROM attachments WHERE id = ?').run(a.id);
   removeUpload(a.stored_name);
-  logActivity(a.board_id, a.card_id, req.actor, `removed attachment ${a.filename}`);
+  logActivity(a.board_id, a.card_id, req.who, `removed attachment ${a.filename}`);
   res.status(204).end();
 });
 
 /* ---------- Comments ---------- */
 
 api.post('/cards/:id/comments', (req, res) => {
-  const card = getCard(req.params.id);
+  const card = getCard(req.params.id, 'viewer');
   const body = typeof req.body.body === 'string' ? req.body.body.trim().slice(0, 20000) : '';
   if (!body) throw new HttpError(400, 'Comment is empty');
   const id = uuid();
-  db.prepare('INSERT INTO comments (id, card_id, author, body, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(id, card.id, req.actor, body, now());
+  db.prepare('INSERT INTO comments (id, card_id, author, user_id, body, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, card.id, req.who.name, req.who.id, body, now());
   res.status(201).json(db.prepare('SELECT * FROM comments WHERE id = ?').get(id));
 });
 
 api.delete('/comments/:id', (req, res) => {
-  db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.id);
+  const c = guard(db.prepare(`SELECT cm.*, l.board_id FROM comments cm JOIN cards c ON c.id = cm.card_id
+    JOIN lists l ON l.id = c.list_id WHERE cm.id = ?`).get(req.params.id), 'Comment', 'viewer');
+  if (c.user_id !== req.user.id && boardRole(c.board_id, req.user) !== 'owner') throw new HttpError(403, 'You can only delete your own comments');
+  db.prepare('DELETE FROM comments WHERE id = ?').run(c.id);
   res.status(204).end();
 });
 

@@ -48,7 +48,7 @@ export function Menu({ items, label = '⋯', className = '' }) {
 }
 
 // Text that becomes an input on click. Saves on Enter/blur, cancels on Escape.
-export function InlineEdit({ value, onSave, className = '', multiline = false, placeholder = '' }) {
+export function InlineEdit({ value, onSave, className = '', multiline = false, placeholder = '', readOnly = false }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
@@ -57,6 +57,7 @@ export function InlineEdit({ value, onSave, className = '', multiline = false, p
     const v = draft.trim();
     if (v && v !== value) onSave(v);
   };
+  if (readOnly) return <span className={className}>{value}</span>;
   if (!editing) {
     return (
       <span className={`inline-edit ${className}`} onClick={(e) => { e.stopPropagation(); setEditing(true); }} title="Click to edit">
