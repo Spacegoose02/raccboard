@@ -14,7 +14,7 @@
 - [x] Installable PWA (manifest, app-shell service worker, raccoon icons)
 - [x] Android APK via Capacitor: asks for the server URL on first launch; built locally (`npm run android:apk`, JDK 21 + Android SDK) or in GitHub Actions
 
-## v1.0.0 (in progress)
+## v1.0.0 (released 2026-10-18)
 
 - [x] Archive-list button in the list header, plus "Archive all cards in this list"
 - [x] Due dates on lists (also shown on collapsed lists) and on sublists (checklists), with the next sublist due date on the card face
