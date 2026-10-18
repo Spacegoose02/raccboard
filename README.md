@@ -136,6 +136,22 @@ OIDC sign-in uses the browser (web and PWA). To use the Android app with an SSO 
 
 `npm run smoke:oidc` runs the whole OIDC flow against a built-in mock identity provider.
 
+## Calendars
+
+Settings → **Calendar** offers three ways to see your dates outside Rackboard, from simplest to most automatic:
+
+1. **Add to calendar** on any card with a due date: opens a prefilled Google Calendar event, or downloads an `.ics` file for Apple Calendar or Outlook.
+2. **Calendar feed**: a private `.ics` link with everything dated on the boards you can open. Subscribe to it from Google Calendar (*Other calendars → From URL*), Apple Calendar or Outlook. Google can only reach the feed if your server is reachable from the internet, and refreshes it every few hours. **Reset link** stops the old URL from working.
+3. **Google Calendar sync**: pushes dates from boards you pick into a Google calendar you pick, within seconds of a change. It's one-way (Rackboard → Google), and there's a full re-check every 10 minutes. Cards with a start date become multi-day all-day events; timed due dates become 30-minute events; sublists and checklist items get their own events.
+
+To turn on Google sync, an admin creates an OAuth client in Google Cloud:
+1. In Google Cloud Console, create a project and enable the **Google Calendar API**.
+2. On the **OAuth consent screen**, choose External and add yourself (and family) as test users, or publish the app.
+3. Under **Credentials → Create credentials → OAuth client ID**, choose **Web application**. Add the redirect URI `https://<your-rackboard>/api/google/callback`. Google only accepts `https` addresses or `http://localhost`, so a LAN-only server needs a hostname with HTTPS (e.g. via a reverse proxy or Tailscale).
+4. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `PUBLIC_URL` (or `GOOGLE_REDIRECT_URI`) and restart. Each person then clicks **Connect Google Calendar** in Settings.
+
+Event times use the server's time zone (`TZ`). `npm run smoke:google` runs the whole connect-and-sync flow against a built-in mock of Google's APIs.
+
 ## Mobile
 
 ### Install from the browser (PWA)

@@ -86,6 +86,16 @@ const dated = await call('GET', `/dates?board=${board.id}&from=2026-09-01&to=202
 check(['card', 'checklist', 'item'].every((t) => dated.some((d) => d.type === t)), 'calendar dates include cards, sublists and items');
 const outside = await call('GET', `/dates?board=${board.id}&from=2027-01-01&to=2027-01-31`);
 check(outside.length === 0, 'calendar date range is respected');
+const feed = await call('GET', '/calendar/feed');
+// The feed URL uses the server's public address; fetch the same path on the test server.
+const local = (url) => base.replace(/\/api$/, '') + new URL(url).pathname;
+const ics = await fetch(local(feed.url)).then((r) => r.text());
+check(ics.startsWith('BEGIN:VCALENDAR') && ics.includes('SUMMARY:☑ Shopping · Buy brushes'), 'calendar feed (.ics) works without signing in');
+const cardIcs = await fetch(`${base}/cards/${card2.id}/ics?access_token=${session.token}`).then((r) => r.text());
+check(cardIcs.includes('DTSTART;VALUE=DATE:20261220'), 'card .ics download');
+const reset = await call('POST', '/calendar/feed/reset');
+const old = await fetch(local(feed.url));
+check(reset.url !== feed.url && old.status === 404, 'resetting the feed link disables the old one');
 await call('PATCH', `/lists/${todo.id}`, { due_date: '2026-11-30' });
 const archivedCount = await call('POST', `/lists/${doing.id}/archive-cards`);
 full = await call('GET', `/boards/${board.id}`);

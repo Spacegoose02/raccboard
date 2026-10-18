@@ -676,3 +676,13 @@ img.avatar { object-fit: cover; }
   .card-table td[data-label]:not(.col-title)::before { content: attr(data-label) ': '; color: var(--muted); font-size: 12px; }
   .card-table td.col-done { position: absolute; left: 4px; top: 8px; width: auto; padding: 0 0 0 6px; }
 }
+
+/* Calendar settings & add-to-calendar */
+.feed-row input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.board-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 4px; font-weight: 400; }
+.board-checks .check-field { font-size: 14px; color: var(--text); font-weight: 400; }
+.add-cal { position: relative; display: inline-block; margin-left: 6px; }
+.add-cal .popover { left: 0; }
+.small-btn { font-size: 12px; padding: 4px 8px; }
+.popover a.btn.wide { display: flex; justify-content: center; margin-top: 0; }
+@media (max-width: 600px) { .feed-row { flex-wrap: wrap; } }

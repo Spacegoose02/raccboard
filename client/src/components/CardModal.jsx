@@ -140,6 +140,7 @@ export default function CardModal({ cardId, labels, people = [], onChanged, onCl
                       {due === 'soon' && <span className="tag warn">Due soon</span>}
                       {due === 'done' && <span className="tag success">Complete</span>}
                     </button>
+                    {card.due_date && <AddToCalendar card={card} />}
                   </div>
                 )}
               </div>
@@ -470,5 +471,39 @@ function CommentsAndActivity({ card, comments, activity, run }) {
         })}
       </ul>
     </>
+  );
+}
+
+// "Add to calendar": a prefilled Google Calendar event, or an .ics file for Apple/Outlook.
+function AddToCalendar({ card }) {
+  const [open, setOpen] = useState(false);
+  const compact = (v) => v.replace(/[-:]/g, '');
+  const nextDay = (d) => { const x = new Date(`${d}T00:00`); x.setDate(x.getDate() + 1); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
+  let dates;
+  if (card.start_date) dates = `${compact(card.start_date.slice(0, 10))}/${nextDay(card.due_date.slice(0, 10))}`;
+  else if (card.due_date.length > 10) {
+    const end = new Date(card.due_date);
+    end.setMinutes(end.getMinutes() + 30);
+    const local = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}00`;
+    dates = `${local(new Date(card.due_date))}/${local(end)}`;
+  } else dates = `${compact(card.due_date)}/${nextDay(card.due_date)}`;
+  const link = window.location.href.split('#')[0] + window.location.hash;
+  const google = new URL('https://calendar.google.com/calendar/render');
+  google.search = new URLSearchParams({
+    action: 'TEMPLATE', text: card.title, dates,
+    details: [card.list_name, card.description?.slice(0, 1000), link].filter(Boolean).join('\n\n'),
+    ctz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  }).toString();
+  return (
+    <span className="add-cal">
+      <button className="btn subtle small-btn" onClick={() => setOpen((o) => !o)}>📅 Add to calendar</button>
+      {open && (
+        <Popover title="Add to calendar" onClose={() => setOpen(false)}>
+          <a className="btn wide" href={google.href} target="_blank" rel="noreferrer noopener" onClick={() => setOpen(false)}>Google Calendar</a>
+          <a className="btn wide" href={apiUrl(`/cards/${card.id}/ics`)} onClick={() => setOpen(false)}>Apple / Outlook (.ics)</a>
+          <p className="muted small">For automatic updates, use Settings → Calendar.</p>
+        </Popover>
+      )}
+    </span>
   );
 }

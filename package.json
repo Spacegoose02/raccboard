@@ -19,7 +19,8 @@
     "android:sync": "npm run build && cap sync android",
     "android:apk": "node scripts/apk.js debug",
     "android:open": "cap open android",
-    "smoke:oidc": "node scripts/smoke-oidc.js"
+    "smoke:oidc": "node scripts/smoke-oidc.js",
+    "smoke:google": "node scripts/smoke-google.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
