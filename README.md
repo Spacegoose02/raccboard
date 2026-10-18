@@ -69,29 +69,42 @@ Smoke test against a running server: `npm run smoke` (or `node scripts/smoke.js 
 
 ## Docker
 
+Images are published to GitHub Container Registry for `linux/amd64` and `linux/arm64`:
+
+| Tag | Meaning |
+| --- | --- |
+| `ghcr.io/spacegoose02/rackboard:latest` | Latest build of `main` |
+| `:1.0.0`, `:1.0`, `:1` | Releases |
+| `:sha-abc1234` | A specific commit |
+
 ```bash
-docker compose up -d --build
+docker run -d --name rackboard -p 3000:3000 -v /path/to/rackboard-data:/data -e TZ=America/New_York \
+  --restart unless-stopped ghcr.io/spacegoose02/rackboard:latest
 ```
 
-Or without Compose:
+Or use Compose: `docker compose up -d` with the included `docker-compose.yml`. To build from source instead, run `docker compose up -d --build`.
 
-```bash
-docker build -t rackboard .
-docker run -d --name rackboard -p 3000:3000 -v /path/to/rackboard-data:/data --restart unless-stopped rackboard
-```
+The image is based on `node:22-slim`. It exposes port 3000, declares `VOLUME /data`, and has a health check at `/api/health`.
 
-The image is `node:22-slim`, exposes port 3000, declares `VOLUME /data`, and has a health check at `/api/health`.
+**Permissions (PUID/PGID):** the container starts as root only long enough to give `/data` to `PUID:PGID`, then runs Rackboard as that user. The defaults are `99:100` (Unraid's `nobody:users`). On other systems set them to your user, e.g. `-e PUID=1000 -e PGID=1000`. If you start the container with `--user`, it skips this step and runs as that user.
 
 ### Unraid
 
-There is no PUID/PGID setup. The container runs as the image's `node` user, and everything it stores lives under `/data`.
+**With the template (easiest):** in Unraid, open **Docker → Add Container**, set **Template** to empty, and paste this into **Template repositories** under Docker settings (or save the file to `/boot/config/plugins/dockerMan/templates-user/`):
 
-1. **Docker → Add Container**, Repository: `rackboard:latest` (or your registry tag once images are published).
-2. Add a **Path**: Container path `/data` → Host path `/mnt/user/appdata/rackboard`.
-3. Add a **Port**: Container `3000` → Host `3000` (or any free port).
-4. Optional variables: `TZ`, `MAX_UPLOAD_MB`.
+```
+https://raw.githubusercontent.com/Spacegoose02/rackboard/main/unraid/rackboard.xml
+```
 
-If the appdata folder was created by root and the container cannot write to it, run `chown -R 1000:1000 /mnt/user/appdata/rackboard` once.
+Then choose **rackboard** from the template list. It fills in the image, port 3000, `/mnt/user/appdata/rackboard`, PUID 99 / PGID 100, TZ, and optional fields for PUBLIC_URL, OIDC and Google Calendar.
+
+**By hand:** **Docker → Add Container**:
+- Repository: `ghcr.io/spacegoose02/rackboard:latest`
+- Path: Container `/data` → Host `/mnt/user/appdata/rackboard`
+- Port: Container `3000` → any free host port
+- Optional variables: `TZ`, `PUBLIC_URL`, and the rest from the tables above
+
+No manual `chown` is needed: the container fixes the appdata folder's ownership on start.
 
 ### Backups
 

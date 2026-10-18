@@ -33,8 +33,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t rackboard:ci .
-      - name: Run container and wait for healthy
+      - name: Run like Unraid (root-owned appdata bind mount) and wait for healthy
         run: |
-          docker run -d --name rb -p 3000:3000 rackboard:ci
-          for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && exit 0; sleep 1; done
-          docker logs rb; exit 1
+          sudo mkdir -p /tmp/appdata && sudo chown root:root /tmp/appdata
+          docker run -d --name rb -p 3000:3000 -v /tmp/appdata:/data rackboard:ci
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && break; sleep 1; done
+          curl -sf http://localhost:3000/api/health || { docker logs rb; exit 1; }
+      - name: Runs as nobody:users and can write /data
+        run: |
+          test "$(docker exec rb sh -c 'stat -c %u:%g /proc/1')" = "99:100"
+          test "$(stat -c %u:%g /tmp/appdata/rackboard.db)" = "99:100"
+          docker logs rb
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Smoke test against the container
+        run: node scripts/smoke.js http://localhost:3000
