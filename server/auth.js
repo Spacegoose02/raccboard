@@ -107,6 +107,8 @@ function checkUsername(u) {
 function checkPassword(p) {
   if (typeof p !== 'string' || p.length < 8) fail(400, 'Password must be at least 8 characters');
   if (p.length > 200) fail(400, 'Password is too long');
+  // Phone keyboards add a trailing space after a word; a password that can't be retyped locks people out.
+  if (p !== p.trim()) fail(400, 'Password cannot start or end with a space');
 }
 const cleanName = (v, fallback) => String(v || '').trim().slice(0, 60) || fallback;
 const cleanEmail = (v) => {
@@ -316,6 +318,7 @@ authRouter.patch('/users/:id', requireAdmin, async (req, res) => {
     checkPassword(req.body.password);
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(req.body.password), u.id);
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+    for (const key of failures.keys()) if (key.endsWith(`|${u.username.toLowerCase()}`)) failures.delete(key);
   }
   res.json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)));
 });

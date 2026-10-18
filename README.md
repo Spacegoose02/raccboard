@@ -116,6 +116,18 @@ On first start, Rackboard asks you to create the first account, which becomes th
 
 Everyone has a profile with a display name, email, and avatar: one of 12 raccoons, an uploaded photo, or initials. Comments and activity show who did what. Passwords are hashed with scrypt. Sessions last 30 days and renew with use. In the browser the session is an HttpOnly cookie; the Android app uses a bearer token. Changing your password signs out your other devices.
 
+### Locked out? Reset a password from the server
+
+Admins can reset anyone's password in **Settings → Users**. If no admin can sign in, use the recovery command inside the container. On Unraid: Docker tab → Rackboard icon → **Console**, or from any shell:
+
+```bash
+docker exec -it rackboard node server/cli.js list-users
+docker exec -it rackboard node server/cli.js reset-password <username> '<new password>'
+docker exec -it rackboard node server/cli.js make-admin <username>
+```
+
+It works while Rackboard is running, signs that user out everywhere, and keeps `/data` owned by `PUID:PGID`. Without Docker, run `node server/cli.js …` in the app folder with the same `DATA_DIR`.
+
 ### Sharing, teams and card members
 
 Boards are private to their owner until shared. Use **👪 Share** on a board, or **Settings → Boards & labels**, to share with a person or a whole team:

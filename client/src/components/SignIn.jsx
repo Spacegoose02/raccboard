@@ -53,9 +53,9 @@ export default function SignIn() {
           </>
         )}
         <label className="field">Password
-          <input type="password" autoComplete={creating ? 'new-password' : 'current-password'} required minLength={creating ? 8 : undefined} {...field('password')} />
+          <input type="password" autoComplete={creating ? 'new-password' : 'current-password'} autoCapitalize="off" autoCorrect="off" spellCheck={false} required minLength={creating ? 8 : undefined} {...field('password')} />
         </label>
-        {creating && <label className="field">Confirm password<input type="password" autoComplete="new-password" required {...field('confirm')} /></label>}
+        {creating && <label className="field">Confirm password<input type="password" autoComplete="new-password" autoCapitalize="off" autoCorrect="off" spellCheck={false} required {...field('confirm')} /></label>}
         {error && <p className="error">{error}</p>}
         <button className="btn primary" disabled={busy} type="submit">
           {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}

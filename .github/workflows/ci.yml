@@ -24,6 +24,7 @@ jobs:
       - run: npm run smoke:oidc
       - run: npm run smoke:google
       - run: npm run smoke:email
+      - run: npm run smoke:cli
       - name: Server log
         if: always()
         run: cat server.log
@@ -49,3 +50,8 @@ jobs:
           node-version: 22
       - name: Smoke test against the container
         run: node scripts/smoke.js http://localhost:3000
+      - name: Recovery CLI via docker exec keeps file ownership
+        run: |
+          docker exec rb node server/cli.js reset-password smoke cli-reset-pass-1
+          curl -sf -X POST -H 'Content-Type: application/json' -d '{"username":"smoke","password":"cli-reset-pass-1"}' http://localhost:3000/api/auth/login > /dev/null
+          test -z "$(sudo find /tmp/appdata ! -user 99)"
