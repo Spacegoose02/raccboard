@@ -22,17 +22,18 @@
 - [x] Accounts: first-run admin setup, local sign-in (scrypt, 30-day sessions), optional self sign-up, admin user management
 - [x] User profiles: display name, email, password, raccoon avatars (12 presets) or photo upload; comments/activity linked to users
 - [x] OIDC single sign-on (Authentik, Authelia, Keycloak, Google…) with PKCE, auto-create and verified-email linking
+- [x] Teams / families: create groups, add people, team owners
+- [x] Board sharing with people or teams as viewer, editor or co-owner; boards are private by default; ownership transfer
+- [x] Card members: add people to cards, Join button, avatars on card faces, filter the board by member or "My cards"
+- [x] List view: sortable table of a board's cards with search and hide-completed (stacked rows on phones)
+- [x] Calendar view per board and across all boards: cards (with start dates), sublists, checklist items and lists; drag to reschedule; day agenda on phones
 
 ## Phase 2: Accounts and sharing
 
-- [ ] Share boards with family or with individuals (viewer / editor roles)
-- [ ] Card members: assign people to cards, filter by member
 - [ ] @mentions in comments
 
 ## Phase 3: Views and dates
 
-- [ ] Calendar view (cards, lists and checklist items by due date)
-- [ ] List/table view across boards
 - [ ] Google Calendar sync (one-way first, then two-way)
 - [ ] Due dates on lists and sublists everywhere, including roll-ups on card faces and boards
 - [ ] Reminders and notifications

@@ -6,8 +6,9 @@ const SMOKE_USER = process.env.SMOKE_USER || 'smoke';
 const SMOKE_PASSWORD = process.env.SMOKE_PASSWORD || 'smoke-test-password';
 const headers = { 'Content-Type': 'application/json' };
 
-async function call(method, path, body) {
-  const res = await fetch(base + path, { method, headers, body: body && JSON.stringify(body) });
+async function call(method, path, body, token) {
+  const h = token ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } : headers;
+  const res = await fetch(base + path, { method, headers: h, body: body && JSON.stringify(body) });
   const text = await res.text();
   if (!res.ok) throw new Error(`${method} ${path} -> ${res.status} ${text}`);
   return text ? JSON.parse(text) : null;
@@ -29,7 +30,8 @@ const bad = await fetch(base + '/auth/login', { method: 'POST', headers: { 'Cont
 check(bad.status === 401, 'wrong password rejected');
 const me = await call('PATCH', '/auth/me', { display_name: 'Smoke Test', avatar: 'raccoon:3' });
 check(me.avatar === 'raccoon:3' && me.display_name === 'Smoke Test', 'profile and raccoon avatar saved');
-const extra = await call('POST', '/users', { username: `smoke-${Date.now()}`, password: 'another-password', display_name: 'Extra' });
+const extraName = `smoke-${Date.now()}`;
+const extra = await call('POST', '/users', { username: extraName, password: 'another-password', display_name: 'Extra' });
 check((await call('GET', '/users')).some((u) => u.id === extra.id), 'admin creates a user');
 
 const board = await call('POST', '/boards', { name: 'Smoke board' });
@@ -80,6 +82,10 @@ await call('POST', `/checklists/${cl2.id}/items`, { text: 'Rollers' });
 await call('PATCH', `/checklists/${cl2.id}`, { due_date: '2026-12-20' });
 full = await call('GET', `/boards/${board.id}`);
 check(full.cards.find((c) => c.id === card2.id).next_sub_due === '2026-12-20', 'next sublist due date on card face');
+const dated = await call('GET', `/dates?board=${board.id}&from=2026-09-01&to=2026-12-31`);
+check(['card', 'checklist', 'item'].every((t) => dated.some((d) => d.type === t)), 'calendar dates include cards, sublists and items');
+const outside = await call('GET', `/dates?board=${board.id}&from=2027-01-01&to=2027-01-31`);
+check(outside.length === 0, 'calendar date range is respected');
 await call('PATCH', `/lists/${todo.id}`, { due_date: '2026-11-30' });
 const archivedCount = await call('POST', `/lists/${doing.id}/archive-cards`);
 full = await call('GET', `/boards/${board.id}`);
@@ -89,6 +95,49 @@ check(full.lists.find((l) => l.id === todo.id).due_date === '2026-11-30', 'list 
 await call('PATCH', `/boards/${board.id}`, { completed: true });
 const boards = await call('GET', '/boards');
 check(boards.find((b) => b.id === board.id).completed_at, 'complete board');
+
+/* ----- sharing, teams and card members ----- */
+const other = (await call('POST', '/auth/login', { username: extraName, password: 'another-password' })).token;
+const status404 = async (method, path, body) => {
+  const r = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${other}` }, body: body && JSON.stringify(body) });
+  return r.status;
+};
+const shared = await call('POST', '/boards', { name: 'Shared board' });
+const sharedList = await call('POST', `/boards/${shared.id}/lists`, { name: 'Family' });
+const sharedCard = await call('POST', `/lists/${sharedList.id}/cards`, { title: 'Plan the trip' });
+check(!(await call('GET', '/boards', null, other)).some((b) => b.id === shared.id), 'boards are private by default');
+check(await status404('GET', `/boards/${shared.id}`) === 404, 'no access looks like not found');
+
+await call('PUT', `/boards/${shared.id}/shares`, { user_id: extra.id, role: 'viewer' });
+const asViewer = await call('GET', `/boards/${shared.id}`, null, other);
+check(asViewer.board.my_role === 'viewer' && asViewer.cards.length === 1, 'viewer can open a shared board');
+check(await status404('POST', `/lists/${sharedList.id}/cards`, { title: 'nope' }) === 403, 'viewer cannot add cards');
+check(await status404('PATCH', `/boards/${shared.id}`, { name: 'Hijacked' }) === 403, 'viewer cannot rename the board');
+await call('POST', `/cards/${sharedCard.id}/comments`, { body: 'Viewer comment' }, other);
+check(true, 'viewer can comment');
+
+await call('PUT', `/boards/${shared.id}/shares`, { user_id: extra.id, role: 'editor' });
+await call('POST', `/lists/${sharedList.id}/cards`, { title: 'Book hotel' }, other);
+check(await status404('DELETE', `/boards/${shared.id}`) === 403, 'editor can add cards but not delete the board');
+
+const shareList = await call('GET', `/boards/${shared.id}/shares`);
+await call('DELETE', `/boards/${shared.id}/shares/${shareList.shares[0].id}`);
+check(await status404('GET', `/boards/${shared.id}`) === 404, 'removing a share revokes access');
+
+const team = await call('POST', '/teams', { name: 'Smoke family' });
+await call('PUT', `/teams/${team.id}/members/${extra.id}`);
+await call('PUT', `/boards/${shared.id}/shares`, { team_id: team.id, role: 'editor' });
+check((await call('GET', `/boards/${shared.id}`, null, other)).board.my_role === 'editor', 'sharing with a team gives its members access');
+
+await call('PUT', `/cards/${sharedCard.id}/members/${extra.id}`);
+const withMember = await call('GET', `/boards/${shared.id}`);
+check(withMember.cards.find((c) => c.id === sharedCard.id).member_ids.includes(extra.id), 'card member shown on the card face');
+check(withMember.people.some((p) => p.id === extra.id), 'board lists the people who can be added');
+await call('DELETE', `/teams/${team.id}/members/${extra.id}`);
+const nobody = await fetch(`${base}/cards/${sharedCard.id}/members/${extra.id}`, { method: 'PUT', headers });
+check(nobody.status === 400, 'cannot add a member who has no access');
+await call('DELETE', `/teams/${team.id}`);
+await call('DELETE', `/boards/${shared.id}`);
 
 await call('DELETE', `/boards/${board.id}`);
 await call('DELETE', `/users/${extra.id}`);

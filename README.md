@@ -18,6 +18,7 @@ Runs as a single Node process with a single SQLite file, so it is easy to back u
   - attachments: upload with the button or drag files onto the card, then download or delete
   - **Comments and activity** panel: a comment box plus an activity log (card created, moved, completed, labels, dates, checklist items, attachments)
 - **Card face**: label chips, dates, checklist progress, comment and attachment counts.
+- **Three views per board** (top of the board): **Board**, **List** (a sortable, searchable table) and **Calendar** (a month view of cards, sublists, checklist items and lists; drag an entry to another day to reschedule it). **📅 Calendar** in the top bar shows every board at once.
 - **Labels as custom statuses**: each board starts with *In progress*, *Cancelled*, *Future* and *Done*. You can rename, recolor, add or delete them.
 - **Archived items** drawer on each board, where you can restore or permanently delete lists and cards.
 - **Settings in one place**: your display name, theme, and per-board settings (rename, color, label editor, complete/archive/delete). Open them from the board with **⚙ Board settings**.
@@ -101,6 +102,20 @@ Copy the `data/` folder: it holds `rackboard.db` (plus WAL files) and `uploads/`
 On first start, Rackboard asks you to create the first account, which becomes the **admin**. Existing boards from before accounts are kept. Admins add everyone else in **Settings → Users**, or turn on `ALLOW_SIGNUP=true` so people can sign up themselves.
 
 Everyone has a profile with a display name, email, and avatar: one of 12 raccoons, an uploaded photo, or initials. Comments and activity show who did what. Passwords are hashed with scrypt. Sessions last 30 days and renew with use. In the browser the session is an HttpOnly cookie; the Android app uses a bearer token. Changing your password signs out your other devices.
+
+### Sharing, teams and card members
+
+Boards are private to their owner until shared. Use **👪 Share** on a board, or **Settings → Boards & labels**, to share with a person or a whole team:
+
+- **Viewer**: can read and comment
+- **Editor**: can also add, edit, move and archive lists and cards
+- **Co-owner**: can also rename, share, complete, archive and delete the board
+
+Create teams (a household, a family, a crew) in **Settings → Teams & families**. Sharing a board with a team gives every member access, including people added to the team later.
+
+On a card, **Members** adds people who can open the board, and **Join** adds yourself. Members' avatars show on the card face. The board's filter bar narrows the board to selected people or **My cards**.
+
+Boards created before accounts existed belong to the first admin.
 
 ### Single sign-on (OIDC)
 

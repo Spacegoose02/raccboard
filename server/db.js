@@ -129,6 +129,40 @@ const migrations = [
   ALTER TABLE comments ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
   ALTER TABLE activity ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
   `,
+  // v4: board owners, teams/families, board sharing and card members
+  `
+  ALTER TABLE boards ADD COLUMN owner_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+  UPDATE boards SET owner_id = (SELECT id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1);
+  CREATE TABLE teams (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE team_members (
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'member',
+    PRIMARY KEY (team_id, user_id)
+  );
+  CREATE TABLE board_shares (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    CHECK ((user_id IS NULL) != (team_id IS NULL))
+  );
+  CREATE UNIQUE INDEX idx_shares_user ON board_shares(board_id, user_id) WHERE user_id IS NOT NULL;
+  CREATE UNIQUE INDEX idx_shares_team ON board_shares(board_id, team_id) WHERE team_id IS NOT NULL;
+  CREATE TABLE card_members (
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (card_id, user_id)
+  );
+  CREATE INDEX idx_card_members_user ON card_members(user_id);
+  `,
 ];
 
 function migrate() {
