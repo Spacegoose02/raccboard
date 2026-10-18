@@ -1,0 +1,13 @@
+services:
+  rackboard:
+    build: .
+    image: rackboard:latest
+    container_name: rackboard
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=America/New_York
+      # - MAX_UPLOAD_MB=25
+    restart: unless-stopped
