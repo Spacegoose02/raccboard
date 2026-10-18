@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, pointerWithin, rectIntersection, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -11,11 +11,11 @@ import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
 import { dueStatus, formatDate } from '../dates.js';
 import { CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
-import CardModal from './CardModal.jsx';
 import { Avatar } from './Avatar.jsx';
 import { ShareDialog } from './Share.jsx';
-import ListView from './ListView.jsx';
-import CalendarView from './CalendarView.jsx';
+const CardModal = lazy(() => import('./CardModal.jsx'));
+const ListView = lazy(() => import('./ListView.jsx'));
+const CalendarView = lazy(() => import('./CalendarView.jsx'));
 
 const VIEWS = [
   { id: 'board', label: '▥ Board' },
@@ -40,6 +40,22 @@ export default function Board({ boardId, cardId }) {
   const [active, setActive] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  // Phone list pager: which list is in view, and jumping to one.
+  const listsRef = useRef(null);
+  const [pagerIndex, setPagerIndex] = useState(0);
+  const onListsScroll = () => {
+    const el = listsRef.current;
+    if (!el) return;
+    const cols = [...el.querySelectorAll(':scope > .list')];
+    const left = el.getBoundingClientRect().left;
+    let best = 0;
+    cols.forEach((c, i) => { if (Math.abs(c.getBoundingClientRect().left - left) < Math.abs(cols[best].getBoundingClientRect().left - left)) best = i; });
+    setPagerIndex(best);
+  };
+  const jumpToList = (id, i) => {
+    setPagerIndex(i);
+    listsRef.current?.querySelector(`[data-list-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+  };
   const [view, setViewState] = useState(() => savedView(boardId));
   const setView = (v) => { setViewState(v); try { localStorage.setItem(viewKey(boardId), v); } catch { /* storage blocked */ } };
   // Card filter: selected member ids, and "only my cards".
@@ -62,6 +78,12 @@ export default function Board({ boardId, cardId }) {
     } catch (e) { setError(e.message); }
   }, [boardId]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 30000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [load]);
 
   const cardsById = useMemo(() => Object.fromEntries((data?.cards || []).map((c) => [c.id, c])), [data]);
   const listsById = useMemo(() => Object.fromEntries((data?.lists || []).map((l) => [l.id, l])), [data]);
@@ -108,6 +130,7 @@ export default function Board({ boardId, cardId }) {
   }, []);
 
   const onDragStart = ({ active: a }) => {
+    navigator.vibrate?.(12); // a small buzz on phones when a long-press picks something up
     const type = isList(a.id) ? 'list' : 'card';
     const id = raw(a.id);
     const fromList = type === 'card' ? findList(id) : null;
@@ -222,9 +245,16 @@ export default function Board({ boardId, cardId }) {
           {data.people.length > 6 && <span className="more-people">+{data.people.length - 6}</span>}
         </div>
         <button className="btn subtle" onClick={() => setShowShare(true)}>👪 {isOwner ? 'Share' : 'Members'}</button>
-        {isOwner && <a className="btn subtle" href={`#/settings/board/${boardId}`}>⚙<span className="hide-sm"> Board settings</span></a>}
-        {canEdit && <button className="btn subtle" onClick={() => setShowArchived(true)}>🗃<span className="hide-sm"> Archived items</span></button>}
-        {isOwner && <button className="btn subtle" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen' : '✓ Complete'}<span className="hide-sm"> board</span></button>}
+        {isOwner && <a className="btn subtle wide-only" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>}
+        {canEdit && <button className="btn subtle wide-only" onClick={() => setShowArchived(true)}>🗃 Archived items</button>}
+        {isOwner && <button className="btn subtle wide-only" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen board' : '✓ Complete board'}</button>}
+        {canEdit && (
+          <Menu className="narrow-only" items={[
+            isOwner && { label: '⚙ Board settings', onClick: () => navigate(`/settings/board/${boardId}`) },
+            { label: '🗃 Archived items', onClick: () => setShowArchived(true) },
+            isOwner && { label: board.completed_at ? '↺ Reopen board' : '✓ Complete board', onClick: toggleBoardComplete },
+          ]} />
+        )}
       </div>
       {data.people.length > 1 && (
         <div className="filter-bar">
@@ -239,10 +269,12 @@ export default function Board({ boardId, cardId }) {
         </div>
       )}
 
-      {view === 'list' && <ListView data={data} cards={data.cards.filter(shows)} ctx={ctx} />}
-      {view === 'calendar' && <CalendarView boardId={boardId} keep={keepEvent} canEdit={canEdit} onChanged={load} />}
+      <Suspense fallback={<p className="muted loading-view">Loading…</p>}>
+        {view === 'list' && <ListView data={data} cards={data.cards.filter(shows)} ctx={ctx} />}
+        {view === 'calendar' && <CalendarView boardId={boardId} keep={keepEvent} canEdit={canEdit} onChanged={load} />}
+      </Suspense>
       {view === 'board' && <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
-        <div className={`lists ${active ? 'is-dragging' : ''}`}>
+        <div className={`lists ${active ? 'is-dragging' : ''}`} ref={listsRef} onScroll={onListsScroll}>
           <SortableContext items={listOrder.map((id) => LIST + id)} strategy={horizontalListSortingStrategy}>
             {listOrder.map((id) => listsById[id] && (
               <ListColumn key={id} list={listsById[id]} cardIds={(cols[id] || []).filter((cid) => cardsById[cid] && shows(cardsById[cid]))} ctx={ctx} onUpdate={updateList} onAddCard={addCard} onArchiveCards={archiveCards} />
@@ -265,7 +297,17 @@ export default function Board({ boardId, cardId }) {
         </DragOverlay>
       </DndContext>}
 
+      {view === 'board' && listOrder.length > 1 && (
+        <nav className="list-pager" aria-label="Jump to list">
+          {listOrder.map((id, i) => listsById[id] && (
+            <button key={id} className={i === pagerIndex ? 'on' : ''} onClick={() => jumpToList(id, i)}>
+              {listsById[id].name}<span className="pager-count">{(cols[id] || []).length}</span>
+            </button>
+          ))}
+        </nav>
+      )}
       {cardId && (
+        <Suspense fallback={null}>
         <CardModal
           cardId={cardId}
           labels={data.labels}
@@ -273,6 +315,7 @@ export default function Board({ boardId, cardId }) {
           onChanged={load}
           onClose={() => navigate(`/b/${boardId}`)}
         />
+        </Suspense>
       )}
       {showShare && <ShareDialog boardId={boardId} onClose={() => setShowShare(false)} onChanged={load} />}
       {showArchived && <ArchivedDrawer boardId={boardId} onClose={() => setShowArchived(false)} onChanged={load} />}
@@ -292,7 +335,7 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards })
 
   if (collapsed) {
     return (
-      <div ref={setNodeRef} style={style} className={`list collapsed ${isDragging ? 'dragging' : ''}`} {...attributes} {...listeners}
+      <div ref={setNodeRef} style={style} data-list-id={list.id} className={`list collapsed ${isDragging ? 'dragging' : ''}`} {...attributes} {...listeners}
         onClick={() => collapse(false)} title="Expand list">
         <span className="collapsed-count">{cardIds.length}</span>
         <span className="collapsed-name">{list.name}</span>
@@ -302,7 +345,7 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards })
   }
 
   return (
-    <div ref={setNodeRef} style={style} className={`list ${isDragging ? 'dragging' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`list ${isDragging ? 'dragging' : ''}`} data-list-id={list.id}>
       <div className="list-head" {...attributes} {...listeners}>
         <InlineEdit value={list.name} onSave={(name) => onUpdate(list.id, { name })} className="list-name" readOnly={!ctx.canEdit} />
         <span className="list-count">{cardIds.length}</span>

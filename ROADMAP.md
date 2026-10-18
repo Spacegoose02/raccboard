@@ -28,6 +28,7 @@
 - [x] List view: sortable table of a board's cards with search and hide-completed (stacked rows on phones)
 - [x] Calendar view per board and across all boards: cards (with start dates), sublists, checklist items and lists; drag to reschedule; day agenda on phones
 - [x] Send a card by email: formatted HTML email with checklists, a calendar file for its dates and optional attachments; SMTP settings in Settings → Email
+- [x] Mobile polish: list tabs to jump between lists on phones, compact board header with a ⋯ menu, boards refresh when the app returns to the foreground (and every 30s), offline banner, a small vibration when a drag starts, lazy-loaded views (first download about 40% smaller)
 - [x] Send dates to Google Calendar: "Add to calendar" on cards (Google link or .ics), a private calendar feed for any calendar app, and one-way Google Calendar sync for chosen boards
 
 ## Phase 2: Accounts and sharing
