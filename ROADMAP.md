@@ -22,11 +22,12 @@
 - [x] Accounts: first-run admin setup, local sign-in (scrypt, 30-day sessions), optional self sign-up, admin user management
 - [x] User profiles: display name, email, password, raccoon avatars (12 presets) or photo upload; comments/activity linked to users
 - [x] OIDC single sign-on (Authentik, Authelia, Keycloak, Google…) with PKCE, auto-create and verified-email linking
+- [x] Teams / families: create groups, add people, team owners
+- [x] Board sharing with people or teams as viewer, editor or co-owner; boards are private by default; ownership transfer
+- [x] Card members: add people to cards, Join button, avatars on card faces, filter the board by member or "My cards"
 
 ## Phase 2: Accounts and sharing
 
-- [ ] Share boards with family or with individuals (viewer / editor roles)
-- [ ] Card members: assign people to cards, filter by member
 - [ ] @mentions in comments
 
 ## Phase 3: Views and dates

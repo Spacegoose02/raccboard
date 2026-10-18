@@ -23,6 +23,8 @@ export default function Home() {
   if (!boards) return <div className="page"><p className="muted">Loading…</p></div>;
 
   const active = boards.filter((b) => !b.archived && !b.completed_at);
+  const mine = active.filter((b) => b.my_role === 'owner');
+  const shared = active.filter((b) => b.my_role !== 'owner');
   const completed = boards.filter((b) => !b.archived && b.completed_at);
   const archived = boards.filter((b) => b.archived);
 
@@ -31,10 +33,19 @@ export default function Home() {
       <section>
         <h2>Your boards</h2>
         <div className="tiles">
-          {active.map((b) => <BoardTile key={b.id} board={b} onUpdate={update} />)}
+          {mine.map((b) => <BoardTile key={b.id} board={b} onUpdate={update} />)}
           <NewBoardTile onCreated={(b) => navigate(`/b/${b.id}`)} />
         </div>
       </section>
+
+      {shared.length > 0 && (
+        <section>
+          <h2>Shared with you</h2>
+          <div className="tiles">
+            {shared.map((b) => <BoardTile key={b.id} board={b} onUpdate={update} />)}
+          </div>
+        </section>
+      )}
 
       {completed.length > 0 && (
         <section>
@@ -65,7 +76,8 @@ function BoardTile({ board, onUpdate, onDelete }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(board.name);
   const pct = board.card_count ? Math.round((board.done_count / board.card_count) * 100) : 0;
-  const items = [
+  // Only owners manage a board; everyone else just opens it.
+  const items = board.my_role !== 'owner' ? [] : [
     { label: 'Rename', onClick: () => setRenaming(true) },
     board.completed_at
       ? { label: 'Reopen board', onClick: () => onUpdate(board.id, { completed: false }) }
@@ -95,8 +107,11 @@ function BoardTile({ board, onUpdate, onDelete }) {
         <span className="tile-name">{board.completed_at && '✓ '}{board.name}</span>
       )}
       <div className="tile-foot">
-        <span>{board.card_count} card{board.card_count === 1 ? '' : 's'}{board.card_count ? ` · ${pct}% done` : ''}</span>
-        <Menu items={items} />
+        <span>
+          {board.card_count} card{board.card_count === 1 ? '' : 's'}{board.card_count ? ` · ${pct}% done` : ''}
+          {board.my_role !== 'owner' && board.owner_name && <><br />by {board.owner_name}{board.my_role === 'viewer' ? ' · view only' : ''}</>}
+        </span>
+        {items.length > 0 && <Menu items={items} />}
       </div>
     </div>
   );

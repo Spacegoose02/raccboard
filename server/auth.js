@@ -207,6 +207,7 @@ authRouter.post('/auth/setup', async (req, res) => {
     username, password: req.body.password, role: 'admin',
     display_name: cleanName(req.body.display_name, username), email: cleanEmail(req.body.email),
   });
+  db.prepare('UPDATE boards SET owner_id = ? WHERE owner_id IS NULL').run(user.id);
   res.status(201).json(signIn(req, res, user));
 });
 

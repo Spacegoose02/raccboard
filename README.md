@@ -102,6 +102,20 @@ On first start, Rackboard asks you to create the first account, which becomes th
 
 Everyone has a profile with a display name, email, and avatar: one of 12 raccoons, an uploaded photo, or initials. Comments and activity show who did what. Passwords are hashed with scrypt. Sessions last 30 days and renew with use. In the browser the session is an HttpOnly cookie; the Android app uses a bearer token. Changing your password signs out your other devices.
 
+### Sharing, teams and card members
+
+Boards are private to their owner until shared. Use **👪 Share** on a board, or **Settings → Boards & labels**, to share with a person or a whole team:
+
+- **Viewer**: can read and comment
+- **Editor**: can also add, edit, move and archive lists and cards
+- **Co-owner**: can also rename, share, complete, archive and delete the board
+
+Create teams (a household, a family, a crew) in **Settings → Teams & families**. Sharing a board with a team gives every member access, including people added to the team later.
+
+On a card, **Members** adds people who can open the board, and **Join** adds yourself. Members' avatars show on the card face. The board's filter bar narrows the board to selected people or **My cards**.
+
+Boards created before accounts existed belong to the first admin.
+
 ### Single sign-on (OIDC)
 
 Works with Authentik, Authelia, Keycloak, Google, Microsoft and any other OpenID Connect provider. Create a confidential client with the redirect URI `https://<your-rackboard>/api/auth/oidc/callback`, then set:

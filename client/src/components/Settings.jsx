@@ -7,11 +7,13 @@ import { ServerForm } from './ServerSetup.jsx';
 import { Avatar, RACCOONS, RaccoonFace } from './Avatar.jsx';
 import { ColorPicker, Menu } from './ui.jsx';
 import { loadUsers, setCurrentUser, signOut, useAuth } from '../auth.js';
+import { SharePanel } from './Share.jsx';
 
 // Every setting lives on this one page, grouped into sections.
 const SECTIONS = [
   { id: 'profile', label: 'Profile' },
   { id: 'users', label: 'Users', admin: true },
+  { id: 'teams', label: 'Teams & families' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'boards', label: 'Boards & labels' },
   IS_NATIVE && { id: 'server', label: 'Server' },
@@ -36,6 +38,7 @@ export default function Settings({ boardId }) {
         <div className="settings-body">
           <section className="panel" ref={section('profile')}><ProfileSettings /></section>
           {user?.role === 'admin' && <section className="panel" ref={section('users')}><UsersSettings /></section>}
+          <section className="panel" ref={section('teams')}><TeamsSettings /></section>
           <section className="panel" ref={section('appearance')}><ThemeSettings /></section>
           <section className="panel" ref={section('boards')}><BoardSettings initialBoardId={boardId} /></section>
           {IS_NATIVE && (
@@ -224,7 +227,8 @@ function BoardSettings({ initialBoardId }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
 
-  const loadBoards = useCallback(() => api.get('/boards').then((b) => {
+  const loadBoards = useCallback(() => api.get('/boards').then((all) => {
+    const b = all.filter((x) => x.my_role === 'owner');
     setBoards(b);
     setSelected((cur) => (cur && b.some((x) => x.id === cur) ? cur : b[0]?.id || ''));
   }).catch((e) => setError(e.message)), []);
@@ -243,7 +247,7 @@ function BoardSettings({ initialBoardId }) {
 
   if (error) return <><h3>Boards & labels</h3><p className="error">{error}</p></>;
   if (!boards) return <><h3>Boards & labels</h3><p className="muted">Loading…</p></>;
-  if (!boards.length) return <><h3>Boards & labels</h3><p className="muted">No boards yet. <a href="#/">Create one</a>.</p></>;
+  if (!boards.length) return <><h3>Boards & labels</h3><p className="muted">You don't own any boards yet. <a href="#/">Create one</a>.</p></>;
 
   const board = detail?.board;
   const status = (b) => (b.archived ? ' (archived)' : b.completed_at ? ' (completed)' : '');
@@ -258,6 +262,9 @@ function BoardSettings({ initialBoardId }) {
       {board && board.id === selected && (
         <div className="stack board-settings">
           <BoardNameColor key={board.id} board={board} onSave={(patch) => act(() => api.patch(`/boards/${board.id}`, patch))} />
+
+          <h4>Sharing</h4>
+          <SharePanel key={board.id} boardId={board.id} />
 
           <h4>Labels (statuses)</h4>
           <div className="label-editor">
@@ -334,5 +341,79 @@ function NewLabel({ onAdd }) {
       </div>
       <ColorPicker colors={COLORS} value={color} onChange={setColor} />
     </div>
+  );
+}
+
+function TeamsSettings() {
+  const { user: me, users } = useAuth();
+  const [teams, setTeams] = useState(null);
+  const [name, setName] = useState('');
+  const [msg, setMsg] = useState('');
+  const load = useCallback(() => api.get('/teams').then(setTeams).catch((e) => setMsg(e.message)), []);
+  useEffect(() => { load(); }, [load]);
+  const act = async (fn) => {
+    setMsg('');
+    try { await fn(); } catch (e) { setMsg(e.message); }
+    load();
+  };
+  const create = () => { if (name.trim()) { act(() => api.post('/teams', { name })); setName(''); } };
+
+  return (
+    <>
+      <h3>Teams & families</h3>
+      <p className="muted">Group people (a household, a family, a project crew) and share boards with the whole group at once from a board's Share button.</p>
+      {msg && <p className="error">{msg}</p>}
+      {teams?.map((t) => {
+        const myRole = t.members.find((m) => m.id === me.id)?.team_role;
+        const manage = myRole === 'owner' || me.role === 'admin';
+        const memberIds = new Set(t.members.map((m) => m.id));
+        return (
+          <div key={t.id} className="team-card">
+            <div className="row spread">
+              <InlineTeamName team={t} editable={manage} onSave={(n) => act(() => api.patch(`/teams/${t.id}`, { name: n }))} />
+              {manage
+                ? <button className="btn danger subtle" onClick={() => confirm(`Delete team "${t.name}"? Boards shared with it lose that access.`) && act(() => api.del(`/teams/${t.id}`))}>Delete team</button>
+                : <button className="btn subtle" onClick={() => confirm(`Leave "${t.name}"?`) && act(() => api.del(`/teams/${t.id}/members/${me.id}`))}>Leave</button>}
+            </div>
+            <div className="team-members">
+              {t.members.map((m) => (
+                <div key={m.id} className="user-row">
+                  <Avatar user={m} size={30} />
+                  <div className="grow"><b>{m.display_name}</b>{m.id === me.id ? ' (you)' : ''} <span className="muted small">{m.team_role === 'owner' ? '· owner' : ''}</span></div>
+                  {manage && m.id !== me.id && (
+                    <Menu items={[
+                      { label: m.team_role === 'owner' ? 'Make member' : 'Make owner', onClick: () => act(() => api.put(`/teams/${t.id}/members/${m.id}`, { role: m.team_role === 'owner' ? 'member' : 'owner' })) },
+                      { label: 'Remove from team', danger: true, onClick: () => act(() => api.del(`/teams/${t.id}/members/${m.id}`)) },
+                    ]} />
+                  )}
+                </div>
+              ))}
+            </div>
+            {manage && (
+              <select value="" onChange={(e) => e.target.value && act(() => api.put(`/teams/${t.id}/members/${e.target.value}`))} aria-label="Add someone">
+                <option value="">+ Add someone…</option>
+                {users.filter((u) => !memberIds.has(u.id)).map((u) => <option key={u.id} value={u.id}>{u.display_name} (@{u.username})</option>)}
+              </select>
+            )}
+          </div>
+        );
+      })}
+      {teams?.length === 0 && <p className="muted small">No teams yet.</p>}
+      <div className="row">
+        <input placeholder="New team name, e.g. The Smiths" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} />
+        <button className="btn primary" disabled={!name.trim()} onClick={create}>Create team</button>
+      </div>
+    </>
+  );
+}
+
+function InlineTeamName({ team, editable, onSave }) {
+  const [name, setName] = useState(team.name);
+  if (!editable) return <b className="team-name">👪 {team.name}</b>;
+  return (
+    <span className="row team-name">👪
+      <input value={name} maxLength={80} onChange={(e) => setName(e.target.value)}
+        onBlur={() => name.trim() && name !== team.name && onSave(name)} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()} />
+    </span>
   );
 }

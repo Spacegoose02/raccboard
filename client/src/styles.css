@@ -566,3 +566,37 @@ img.avatar { object-fit: cover; }
 .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 .btn.sso { text-align: center; justify-content: center; }
 @media (max-width: 600px) { .hide-sm { display: none; } }
+
+/* Sharing, teams and members */
+.board-people { display: flex; align-items: center; }
+.board-people .avatar { margin-left: -6px; box-shadow: 0 0 0 2px var(--bg); }
+.board-people .avatar:first-child { margin-left: 0; }
+.more-people { font-size: 12px; color: var(--muted); margin-left: 4px; }
+.role-badge { border: 1px solid var(--border); }
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 16px 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--btn-bg); color: var(--text); border-radius: 16px; padding: 3px 10px 3px 4px; font-size: 13px; min-height: 30px; }
+.chip:not(.person) { padding-left: 10px; }
+.chip.on { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+.card-members { display: inline-flex; margin-left: auto; }
+.card-members .avatar { margin-left: -4px; box-shadow: 0 0 0 2px var(--card-bg); }
+.done-mark { color: var(--success); font-weight: 700; }
+.done-mark.big { font-size: 22px; line-height: 1.2; }
+.btn.round { border-radius: 50%; width: 32px; height: 32px; padding: 0; }
+.member-options { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
+.member-option { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 6px; cursor: pointer; }
+.member-option:hover { background: var(--btn-hover); }
+.share-modal { width: min(560px, 100%); }
+.share-modal .modal-top h3 { margin: 0; }
+.share-body { padding: 16px; }
+.share-add { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.share-list { display: flex; flex-direction: column; }
+.share-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.share-row select { width: auto; }
+.team-avatar { background: var(--btn-bg); font-size: 16px; width: 32px; height: 32px; }
+.team-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
+.team-name input { width: auto; min-width: 180px; font-weight: 600; }
+@media (max-width: 600px) {
+  .share-add { grid-template-columns: 1fr 1fr; }
+  .share-add select:first-child { grid-column: 1 / -1; }
+  .filter-bar { padding: 6px 12px 0; overflow-x: auto; flex-wrap: nowrap; }
+}
