@@ -16,3 +16,6 @@ export const COLORS = [
   '#22c55e', '#eab308', '#f97316', '#ef4444', '#a855f7',
   '#3b82f6', '#06b6d4', '#84cc16', '#ec4899', '#64748b',
 ];
+
+// True inside the Android app (Capacitor). The app then talks to a server URL chosen on first launch.
+export const IS_NATIVE = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();

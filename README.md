@@ -22,6 +22,12 @@ Runs as a single Node process with a single SQLite file, so it is easy to back u
 - **Archived items** drawer on each board, where you can restore or permanently delete lists and cards.
 - **Settings**: your display name (used on comments and activity) and the theme.
 - **Themes**: Charcoal (default dark), Light, Midnight, Raccoon gray, Forest, Solarized and Dracula.
+- **Phones and tablets**:
+  - lists swipe sideways with snap
+  - long-press a card to drag it (drag to the screen edge to scroll to other lists)
+  - the card view goes full screen with comments below
+  - popovers open as bottom sheets, and tap targets are at least 40 px
+- **Installable**: it is a PWA (web manifest, app-shell service worker, icons). There is also an Android APK, see [Mobile](#mobile).
 
 ## Quick start (development)
 
@@ -50,6 +56,7 @@ Open http://localhost:3000. One process serves both the built client and the API
 | `PORT`          | `3000`   | HTTP port                                |
 | `DATA_DIR`      | `./data` | Where the SQLite database and uploads go |
 | `MAX_UPLOAD_MB` | `25`     | Maximum attachment size                  |
+| `CORS_ORIGIN`   | `*`      | Allowed origin for cross-origin API use  |
 
 Smoke test against a running server: `npm run smoke` (or `node scripts/smoke.js http://host:port`). It creates a temporary board, exercises the API, and then deletes the board.
 
@@ -83,12 +90,37 @@ If the appdata folder was created by root and the container cannot write to it, 
 
 Copy the `data/` folder: it holds `rackboard.db` (plus WAL files) and `uploads/`. For a hot backup, run `sqlite3 rackboard.db ".backup backup.db"`.
 
+## Mobile
+
+### Install from the browser (PWA)
+
+Open the site on your phone and choose **Install app** or **Add to Home screen**. Chrome only offers a full install over HTTPS (or on localhost). On plain `http://192.168.x.x` you get a home-screen shortcut instead. If you want the full install, put Rackboard behind a reverse proxy with a certificate (for example Nginx Proxy Manager, Caddy or Tailscale). Otherwise use the APK.
+
+### Android APK
+
+The `android/` folder is a [Capacitor](https://capacitorjs.com) project that bundles the web app. On first launch it asks for your server address (for example `http://192.168.1.50:3000`), checks `/api/health`, and remembers the address. You can change it later in **Settings → Server**. Plain-HTTP LAN servers are allowed.
+
+Build it locally. This needs **JDK 21** and the Android SDK, with `ANDROID_HOME` set:
+
+```bash
+npm run android:apk
+```
+
+The debug APK is written to `release/Rackboard-<version>-debug.apk`. To sideload it, copy it to the phone and open it (allow "install unknown apps" for your file manager). `npm run android:open` opens the project in Android Studio.
+
+You can also build it in GitHub Actions: run the **Android APK** workflow manually or push a `v*` tag, then download the APK from the run's artifacts.
+
+`npm run icons` regenerates the PWA icons, Android launcher icons and splash screens from `scripts/icons.js`.
+
+The API allows cross-origin requests so the app can reach it. `CORS_ORIGIN` (default `*`) narrows this down.
+
 ## Project layout
 
 ```
 server/        Express 5 API + SQLite (better-sqlite3), versioned migrations in db.js
 client/        React 19 + Vite app (dnd-kit for drag and drop, react-markdown)
-scripts/       smoke test
+android/       Capacitor Android project (APK)
+scripts/       smoke test, icon generator, APK build
 ```
 
 ## Roadmap

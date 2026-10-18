@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { api } from '../api.js';
+import { api, apiUrl } from '../api.js';
 import { COLORS } from '../config.js';
 import { dueStatus, formatDate, timeAgo } from '../dates.js';
 import { ColorPicker, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
@@ -123,11 +123,11 @@ export default function CardModal({ cardId, labels, onChanged, onClose }) {
                 </div>
                 {attachments.map((a) => (
                   <div key={a.id} className="attachment">
-                    <a className="thumb" href={`/api/attachments/${a.id}?inline=1`} target="_blank" rel="noreferrer">
-                      {a.mime?.startsWith('image/') ? <img src={`/api/attachments/${a.id}?inline=1`} alt="" /> : <span>{(a.filename.split('.').pop() || 'file').slice(0, 4).toUpperCase()}</span>}
+                    <a className="thumb" href={apiUrl(`/attachments/${a.id}?inline=1`)} target="_blank" rel="noreferrer">
+                      {a.mime?.startsWith('image/') ? <img src={apiUrl(`/attachments/${a.id}?inline=1`)} alt="" /> : <span>{(a.filename.split('.').pop() || 'file').slice(0, 4).toUpperCase()}</span>}
                     </a>
                     <div className="att-info">
-                      <a href={`/api/attachments/${a.id}`} className="att-name">{a.filename}</a>
+                      <a href={apiUrl(`/attachments/${a.id}`)} className="att-name">{a.filename}</a>
                       <span className="muted">{formatSize(a.size)} · added {timeAgo(a.created_at)}</span>
                     </div>
                     <button className="btn danger subtle" onClick={() => confirm(`Delete ${a.filename}?`) && run(() => api.del(`/attachments/${a.id}`))}>Delete</button>

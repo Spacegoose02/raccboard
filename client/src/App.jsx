@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { APP_MASCOT, APP_NAME } from './config.js';
+import { APP_MASCOT, APP_NAME, IS_NATIVE } from './config.js';
+import { useSettings } from './settings.js';
 import Home from './components/Home.jsx';
 import Board from './components/Board.jsx';
 import Settings from './components/Settings.jsx';
+import ServerSetup from './components/ServerSetup.jsx';
 
 // Tiny hash router: #/  ·  #/settings  ·  #/b/:boardId  ·  #/b/:boardId/c/:cardId
 function parse(hash) {
@@ -14,6 +16,7 @@ function parse(hash) {
 
 export default function App() {
   const [route, setRoute] = useState(() => parse(window.location.hash));
+  const { serverUrl } = useSettings();
   useEffect(() => {
     const onHash = () => setRoute(parse(window.location.hash));
     window.addEventListener('hashchange', onHash);
@@ -34,9 +37,11 @@ export default function App() {
         </nav>
       </header>
       <main className="main">
+        {IS_NATIVE && !serverUrl ? <ServerSetup onDone={() => { window.location.hash = '/'; }} /> : (<>
         {route.page === 'home' && <Home />}
         {route.page === 'settings' && <Settings />}
         {route.page === 'board' && <Board key={route.boardId} boardId={route.boardId} cardId={route.cardId} />}
+        </>)}
       </main>
     </div>
   );

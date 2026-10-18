@@ -3,3 +3,6 @@ client/dist
 data
 .git
 *.log
+android
+release
+.github

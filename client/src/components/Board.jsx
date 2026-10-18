@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, pointerWithin, rectIntersection, useSensor, useSensors,
+  DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, pointerWithin, rectIntersection, useSensor, useSensors,
 } from '@dnd-kit/core';
 import {
   SortableContext, arrayMove, horizontalListSortingStrategy, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
@@ -49,7 +49,9 @@ export default function Board({ boardId, cardId }) {
   const labelsById = useMemo(() => Object.fromEntries((data?.labels || []).map((l) => [l.id, l])), [data]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    // Long-press to drag on touch screens so a normal swipe still scrolls the board.
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -169,7 +171,7 @@ export default function Board({ boardId, cardId }) {
       </div>
 
       <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
-        <div className="lists">
+        <div className={`lists ${active ? 'is-dragging' : ''}`}>
           <SortableContext items={listOrder.map((id) => LIST + id)} strategy={horizontalListSortingStrategy}>
             {listOrder.map((id) => listsById[id] && (
               <ListColumn key={id} list={listsById[id]} cardIds={cols[id] || []} ctx={ctx} onUpdate={updateList} onAddCard={addCard} />

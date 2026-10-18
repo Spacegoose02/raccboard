@@ -10,6 +10,9 @@
 - [x] Settings page: display name and theme picker
 - [x] Themes: Charcoal (default), Light, Midnight, Raccoon gray, Forest, Solarized, Dracula
 - [x] Dockerfile, docker-compose, Unraid notes
+- [x] Mobile friendly: swipeable lists with snap, long-press touch drag, full-screen card view, bottom-sheet popovers, 40px tap targets
+- [x] Installable PWA (manifest, app-shell service worker, raccoon icons)
+- [x] Android APK via Capacitor: asks for the server URL on first launch; built locally (`npm run android:apk`, JDK 21 + Android SDK) or in GitHub Actions
 
 ## Phase 2: Accounts and sharing
 
@@ -36,4 +39,6 @@
 - [ ] Raccoon branding: logo, empty states, illustrations
 - [ ] Windows .exe via a packaged Node binary (Node SEA or pkg) with a tray icon
 - [ ] GitHub releases plus Docker image publishing (GHCR / Docker Hub, multi-arch)
+- [ ] Signed release APK (keystore in CI secrets), then Play Store / F-Droid listing
+- [ ] Offline edits in the app with sync when the server is reachable
 - [ ] Import from Trello JSON

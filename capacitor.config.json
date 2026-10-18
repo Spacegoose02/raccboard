@@ -1,0 +1,12 @@
+{
+  "appId": "app.rackboard",
+  "appName": "Rackboard",
+  "webDir": "client/dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

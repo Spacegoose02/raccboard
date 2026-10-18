@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rackboard</string>
+    <string name="title_activity_main">Rackboard</string>
+    <string name="package_name">app.rackboard</string>
+    <string name="custom_url_scheme">app.rackboard</string>
+</resources>

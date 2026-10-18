@@ -15,7 +15,12 @@ app.disable('x-powered-by');
 app.use('/api', api);
 
 if (fs.existsSync(dist)) {
-  app.use(express.static(dist, { index: false, maxAge: '1h' }));
+  app.use(express.static(dist, {
+    index: false,
+    // Hashed build assets never change; everything else (sw.js, manifest, icons) revalidates.
+    setHeaders: (res, file) => res.set('Cache-Control', file.includes(`${path.sep}assets${path.sep}`)
+      ? 'public, max-age=31536000, immutable' : 'no-cache'),
+  }));
   // SPA fallback for client-side routes.
   app.get('/{*splat}', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 }

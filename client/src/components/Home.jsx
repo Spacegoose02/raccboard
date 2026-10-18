@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { COLORS } from '../config.js';
+import { COLORS, IS_NATIVE } from '../config.js';
 import { navigate } from '../router.js';
 import { ColorPicker, Menu, useDismiss } from './ui.jsx';
 
@@ -19,7 +19,7 @@ export default function Home() {
     load();
   };
 
-  if (error) return <div className="page"><p className="error">Could not load boards: {error}</p></div>;
+  if (error) return <div className="page"><p className="error">Could not load boards: {error}</p>{IS_NATIVE && <p>Check the server address in <a href="#/settings">Settings</a>.</p>}</div>;
   if (!boards) return <div className="page"><p className="muted">Loading…</p></div>;
 
   const active = boards.filter((b) => !b.archived && !b.completed_at);

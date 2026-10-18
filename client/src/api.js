@@ -1,4 +1,11 @@
 import { getSettings } from './settings.js';
+import { IS_NATIVE } from './config.js';
+
+// In the browser the API is same-origin; in the Android app it lives at the configured server URL.
+export function apiUrl(path) {
+  const base = IS_NATIVE ? (getSettings().serverUrl || '').replace(/\/+$/, '') : '';
+  return `${base}/api${path}`;
+}
 
 function headers(extra = {}) {
   const name = getSettings().displayName;
@@ -7,7 +14,7 @@ function headers(extra = {}) {
 
 async function request(method, path, body) {
   const isForm = body instanceof FormData;
-  const res = await fetch('/api' + path, {
+  const res = await fetch(apiUrl(path), {
     method,
     headers: headers(body && !isForm ? { 'Content-Type': 'application/json' } : {}),
     body: body ? (isForm ? body : JSON.stringify(body)) : undefined,

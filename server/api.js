@@ -5,6 +5,16 @@ import path from 'node:path';
 import { db, uuid, now, logActivity, DEFAULT_LABELS, UPLOAD_DIR } from './db.js';
 
 export const api = express.Router();
+// The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
+// CORS_ORIGIN can narrow this; tighten further once accounts land in Phase 2.
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+api.use((req, res, next) => {
+  res.set('Access-Control-Allow-Origin', CORS_ORIGIN);
+  res.set('Access-Control-Allow-Headers', 'Content-Type, X-User');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
 api.use(express.json({ limit: '2mb' }));
 
 // Display name from the client (Settings page). Accounts arrive in Phase 2.

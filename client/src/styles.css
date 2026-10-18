@@ -432,12 +432,83 @@ textarea.modal-title { min-height: 40px; }
 .tp-card { height: 12px; border-radius: 2px; }
 .tp-accent { height: 6px; width: 50%; border-radius: 2px; }
 
-/* ---------- Small screens ---------- */
-@media (max-width: 760px) {
-  .modal-backdrop { padding: 0; }
-  .modal { border-radius: 0; min-height: 100%; }
-  .modal-body { flex-direction: column; }
-  .modal-side { border-left: none; border-top: 1px solid var(--border); border-radius: 0; }
-  .modal-main { padding: 16px; }
-  .popover { width: min(300px, calc(100vw - 32px)); }
+/* ---------- Touch & mobile ---------- */
+.topbar { padding-top: max(8px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+.card, .list-head, .collapsed-name { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.lists { scroll-padding: 0 16px; overscroll-behavior-x: contain; }
+
+/* Devices without hover: always show controls that are hover-revealed on desktop, and enlarge tap targets. */
+@media (hover: none) {
+  .card .circle { opacity: 1; width: 16px !important; }
+  .item-actions { opacity: 1; }
+  .icon-btn { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+  .btn { min-height: 40px; }
+  .composer-open, .menu-list button, .topnav a, .tabs button { min-height: 40px; }
+  .menu-list button { padding: 10px 14px; }
+  input[type='checkbox'] { width: 22px; height: 22px; }
+  .card .circle, .card:hover .circle { width: 20px !important; height: 20px !important; }
+  .items li { min-height: 44px; }
+  .list-head .icon-btn { min-width: 36px; min-height: 36px; }
 }
+
+/* Tablets and phones */
+@media (max-width: 900px) {
+  .page { padding: 16px 12px 40px; }
+  .lists { scroll-snap-type: x proximity; padding: 10px 12px 12px; }
+  .list, .add-list { scroll-snap-align: start; }
+}
+
+/* Phones */
+@media (max-width: 600px) {
+  input, textarea, select { font-size: 16px; } /* stops iOS zooming into fields */
+  .topbar { gap: 8px; padding-left: 12px; padding-right: 12px; }
+  .brand { font-size: 16px; }
+  .topnav a { padding: 6px 8px; display: inline-flex; align-items: center; }
+  .board-bar { padding: 8px 12px; gap: 4px; }
+  .board-title { font-size: 16px; }
+  input.board-title { min-width: 0; width: 100%; }
+  .board-bar .btn.subtle { padding: 6px 8px; font-size: 13px; }
+  .lists { scroll-snap-type: x mandatory; gap: 10px; }
+  .list, .add-list { width: min(86vw, 320px); }
+  .list { max-height: 100%; }
+  .list.collapsed { width: 44px; }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .tile { min-height: 92px; }
+  .theme-grid { grid-template-columns: repeat(2, 1fr); }
+  .panel { padding: 14px; }
+  .panel .row { flex-wrap: wrap; }
+  .panel .row input { max-width: none; flex: 1; min-width: 160px; }
+  /* Popovers become bottom sheets */
+  .popover, .list .popover, .items .popover {
+    position: fixed; left: 8px; right: 8px; top: auto; bottom: max(8px, env(safe-area-inset-bottom));
+    width: auto; margin: 0; max-height: 75vh; overflow-y: auto; z-index: 200;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  }
+  .menu-list { min-width: 200px; }
+  .drawer { width: 100%; }
+  .attachment { flex-wrap: wrap; }
+  .thumb { width: 64px; height: 48px; }
+  .section-head { flex-wrap: wrap; }
+  .modal-title { font-size: 19px; }
+  .modal-main { gap: 16px; }
+  .action-row { gap: 6px; }
+  .action-row .btn { flex: 1 1 calc(50% - 6px); }
+  .item-text { word-break: break-word; }
+}
+
+/* Full-screen card view under ~700px, comments stacked below */
+@media (max-width: 700px) {
+  .modal-backdrop { padding: 0; align-items: stretch; }
+  .modal { border-radius: 0; min-height: 100%; width: 100%; padding-bottom: env(safe-area-inset-bottom); }
+  .modal-top { position: sticky; top: 0; z-index: 5; background: var(--modal-bg); padding-top: max(10px, env(safe-area-inset-top)); }
+  .modal-body { flex-direction: column; }
+  .modal-main { padding: 16px; }
+  .modal-side { border-left: none; border-top: 1px solid var(--border); border-radius: 0; }
+}
+
+/* Server setup (Android app first launch) */
+.setup { max-width: 420px; margin: 0 auto; padding: 48px 20px; display: flex; flex-direction: column; gap: 14px; }
+.setup .mascot-big { font-size: 56px; text-align: center; }
+.setup h2 { text-align: center; }
+/* Snap would fight dnd-kit's edge auto-scroll while dragging. */
+.lists.is-dragging { scroll-snap-type: none; }

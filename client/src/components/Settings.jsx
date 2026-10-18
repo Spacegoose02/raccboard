@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { APP_MASCOT, APP_NAME, THEMES } from '../config.js';
+import { APP_MASCOT, APP_NAME, IS_NATIVE, THEMES } from '../config.js';
+import { ServerForm } from './ServerSetup.jsx';
 import { updateSettings, useSettings } from '../settings.js';
 import { Avatar } from './CardModal.jsx';
 
@@ -45,6 +46,14 @@ export default function Settings() {
           ))}
         </div>
       </section>
+
+      {IS_NATIVE && (
+        <section className="panel">
+          <h3>Server</h3>
+          <p className="muted">The {APP_NAME} server this app talks to.</p>
+          <ServerForm buttonLabel="Save server" />
+        </section>
+      )}
 
       <section className="panel">
         <h3>About</h3>
