@@ -2,6 +2,7 @@
 //   docker exec -it rackboard node server/cli.js list-users
 //   docker exec -it rackboard node server/cli.js reset-password <username> <new-password>
 //   docker exec -it rackboard node server/cli.js make-admin <username>
+//   docker exec -it rackboard node server/cli.js rename-user <old-username> <new-username>
 // Works while the server is running; no restart needed.
 
 // docker exec runs as root: switch to the data owner first so new files (WAL, uploads) keep the right owner.
@@ -19,7 +20,8 @@ const usage = () => {
   console.log(`Usage:
   node server/cli.js list-users
   node server/cli.js reset-password <username> <new-password>
-  node server/cli.js make-admin <username>`);
+  node server/cli.js make-admin <username>
+  node server/cli.js rename-user <old-username> <new-username>`);
   process.exit(command ? 1 : 0);
 };
 const die = (msg) => { console.error(msg); process.exit(1); };
@@ -52,6 +54,18 @@ switch (command) {
     const user = findUser(name) || noSuchUser(name);
     db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
     console.log(`${user.username} is now an admin.`);
+    break;
+  }
+  case 'rename-user': {
+    const [from, to] = args;
+    if (!from || !to) usage();
+    const user = findUser(from) || noSuchUser(from);
+    const name = to.trim().toLowerCase();
+    if (!/^[a-z0-9._-]{2,32}$/.test(name)) die('New username must be 2-32 characters: letters, numbers, dot, dash or underscore.');
+    const taken = findUser(name);
+    if (taken && taken.id !== user.id) die(`"${name}" is already taken.`);
+    db.prepare('UPDATE users SET username = ? WHERE id = ?').run(name, user.id);
+    console.log(`Username changed from ${user.username} to ${name}. The password is unchanged.`);
     break;
   }
   default:

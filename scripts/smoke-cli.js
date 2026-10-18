@@ -31,6 +31,9 @@ try {
   check(missing.code === 1 && missing.out.includes('Users: helper, underwood02'), 'unknown user lists the real usernames');
   check(cli('reset-password', 'helper', 'short').code === 1, 'too-short passwords are refused');
   check(cli('make-admin', 'helper').out.includes('now an admin') && /helper\s+admin/.test(cli('list-users').out), 'make-admin promotes a user');
+  check(cli('rename-user', 'Helper', 'Family-Helper').out.includes('to family-helper'), 'rename-user changes the sign-in name');
+  check((await login('family-helper', 'helper-pass-1')).ok && !(await login('helper', 'helper-pass-1')).ok, 'new username signs in, old one does not');
+  check(cli('rename-user', 'family-helper', 'underwood02').code === 1, 'rename-user refuses a taken name');
   console.log('CLI smoke test passed.');
 } finally {
   server.kill();

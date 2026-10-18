@@ -43,7 +43,7 @@ export default function SignIn() {
       {mode === 'setup' && <p className="muted">Create the first account. It becomes the admin and can add everyone else in Settings → Users.</p>}
 
       <form className="stack" onSubmit={submit}>
-        <label className="field">Username
+        <label className="field">Username{mode === 'login' ? ' (not your display name)' : ''}
           <input autoFocus autoComplete="username" autoCapitalize="off" autoCorrect="off" required {...field('username')} />
         </label>
         {creating && (
