@@ -16,6 +16,6 @@ const outDir = path.join('android', 'app', 'build', 'outputs', 'apk', type);
 const apk = fs.readdirSync(outDir).find((f) => f.endsWith('.apk'));
 const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 fs.mkdirSync('release', { recursive: true });
-const dest = path.join('release', `Rackboard-${version}-${type}.apk`);
+const dest = path.join('release', `Raccboard-${version}-${type}.apk`);
 fs.copyFileSync(path.join(outDir, apk), dest);
 console.log(`\nAPK ready: ${dest}`);

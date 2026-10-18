@@ -84,7 +84,7 @@ function GoogleSettings() {
     setBusy(false);
   };
   const disconnect = async () => {
-    const remove = confirm('Also delete the events Rackboard added to your Google Calendar?\n\nOK = delete them, Cancel = keep them');
+    const remove = confirm('Also delete the events Raccboard added to your Google Calendar?\n\nOK = delete them, Cancel = keep them');
     if (!confirm('Disconnect Google Calendar?')) return;
     setSt(await api.del(`/google${remove ? '?remove_events=1' : ''}`));
     setMsg('Disconnected.');
@@ -105,7 +105,7 @@ function GoogleSettings() {
         <>
           <p className="muted small">Push due dates from the boards you choose into one of your Google calendars. Changes show up within seconds.</p>
           {IS_NATIVE
-            ? <p className="muted small">Connect Google from Rackboard in a web browser; the app then uses the same connection.</p>
+            ? <p className="muted small">Connect Google from Raccboard in a web browser; the app then uses the same connection.</p>
             : <a className="btn primary" href="/api/google/connect">Connect Google Calendar</a>}
         </>
       )}
@@ -137,7 +137,7 @@ function GoogleSettings() {
             <button className="btn" disabled={busy || !st.calendar_id} onClick={syncNow}>{busy ? 'Syncing…' : 'Sync now'}</button>
             <button className="btn danger subtle" onClick={disconnect}>Disconnect</button>
           </div>
-          <p className="muted small">One-way: Rackboard → Google. Edit dates here; edits made in Google are overwritten on the next sync.</p>
+          <p className="muted small">One-way: Raccboard → Google. Edit dates here; edits made in Google are overwritten on the next sync.</p>
         </div>
       )}
       {msg && <p className="muted small">{msg}</p>}

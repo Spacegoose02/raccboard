@@ -1,6 +1,6 @@
 {
-  "name": "Rackboard",
-  "short_name": "Rackboard",
+  "name": "Raccboard",
+  "short_name": "Raccboard",
   "description": "Self-hosted Kanban boards with lists, sublists and themes.",
   "id": "/",
   "start_url": "/",

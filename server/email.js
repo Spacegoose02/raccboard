@@ -69,7 +69,7 @@ emailRouter.post('/email/test', async (req, res) => {
   const to = String(req.body.to || req.user.email || '').trim();
   if (!to) fail(400, 'Add an email address to your profile, or enter one to send the test to');
   try {
-    await transport(s).sendMail({ from: s.from, to, subject: 'Rackboard test email 🦝', text: 'Email from Rackboard works.' });
+    await transport(s).sendMail({ from: s.from, to, subject: 'Raccboard test email 🦝', text: 'Email from Raccboard works.' });
   } catch (e) {
     fail(502, `Sending failed: ${e.message}`);
   }
@@ -106,7 +106,7 @@ function render(card, sender, note) {
     card.members.length && `Members: ${card.members.join(', ')}`,
     card.description && `\n${card.description}`,
     ...card.checklists.map((cl) => `\n${cl.title}${cl.due_date ? ` (due ${cl.due_date})` : ''}\n${cl.items.map((i) => `  [${i.done ? 'x' : ' '}] ${i.text}${i.due_date ? ` (due ${i.due_date})` : ''}`).join('\n')}`),
-    url && `\nOpen in Rackboard: ${url}`,
+    url && `\nOpen in Raccboard: ${url}`,
   ].filter(Boolean).join('\n');
 
   const chip = (l) => `<span style="display:inline-block;background:${esc(l.color)};color:#fff;border-radius:4px;padding:1px 8px;margin-right:4px;font-size:12px;font-weight:600">${esc(l.name)}</span>`;
@@ -122,9 +122,9 @@ function render(card, sender, note) {
     ${card.checklists.map((cl) => `<h3 style="font-size:15px;margin:16px 0 6px">☑ ${esc(cl.title)}${cl.due_date ? ` <span style="color:#5e6c84;font-weight:400">· due ${esc(cl.due_date)}</span>` : ''}</h3>
       <ul style="list-style:none;padding:0;margin:0">${cl.items.map((i) => `<li style="padding:2px 0">${i.done ? '☑' : '☐'} <span style="${i.done ? 'text-decoration:line-through;color:#5e6c84' : ''}">${esc(i.text)}</span>${i.due_date ? ` <span style="color:#5e6c84;font-size:12px">due ${esc(i.due_date)}</span>` : ''}</li>`).join('')}</ul>`).join('')}
     ${card.attachments.length ? `<p style="color:#5e6c84;font-size:13px;margin-top:16px">📎 ${card.attachments.map((a) => esc(a.filename)).join(', ')}</p>` : ''}
-    ${url ? `<p style="margin-top:20px"><a href="${esc(url)}" style="background:#0c66e4;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block">Open in Rackboard</a></p>` : ''}
+    ${url ? `<p style="margin-top:20px"><a href="${esc(url)}" style="background:#0c66e4;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block">Open in Raccboard</a></p>` : ''}
   </div>
-  <p style="text-align:center;color:#8590a2;font-size:12px">Sent from Rackboard 🦝 by ${esc(sender)}</p>
+  <p style="text-align:center;color:#8590a2;font-size:12px">Sent from Raccboard 🦝 by ${esc(sender)}</p>
 </body></html>`;
   return { text, html };
 }

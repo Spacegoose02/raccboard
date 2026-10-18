@@ -18,7 +18,7 @@ feedRouter.get('/ical/:file', (req, res) => {
   const events = datedEvents({ user }).map(toEvent);
   res.type('text/calendar; charset=utf-8');
   res.set('Cache-Control', 'private, max-age=300');
-  res.send(buildIcs(events, `Rackboard · ${user.display_name}`));
+  res.send(buildIcs(events, `Raccboard · ${user.display_name}`));
 });
 
 export const calendarRouter = express.Router();
@@ -42,7 +42,7 @@ calendarRouter.post('/calendar/feed/reset', (req, res) => {
   res.json({ url: feedUrl(req, token) });
 });
 
-/* ---------- Google Calendar sync (one way: Rackboard → Google) ---------- */
+/* ---------- Google Calendar sync (one way: Raccboard → Google) ---------- */
 
 const env = (k, d = '') => (process.env[k] ?? d).trim();
 const G = {
@@ -108,7 +108,7 @@ function googleBody(e) {
     summary: e.title,
     description: e.description,
     ...when,
-    ...(e.url ? { source: { title: 'Rackboard', url: e.url } } : {}),
+    ...(e.url ? { source: { title: 'Raccboard', url: e.url } } : {}),
     extendedProperties: { private: { rackboardUid: e.uid } },
   };
 }
@@ -226,7 +226,7 @@ calendarRouter.get('/google/callback', async (req, res) => {
     const t = await tokenRequest({ grant_type: 'authorization_code', code: String(req.query.code || ''), redirect_uri: redirectUri(req) });
     const existing = account(req.user.id);
     const refresh = t.refresh_token || existing?.refresh_token;
-    if (!refresh) throw new Error('Google did not return a refresh token. Remove Rackboard from your Google account permissions and try again.');
+    if (!refresh) throw new Error('Google did not return a refresh token. Remove Raccboard from your Google account permissions and try again.');
     const info = await fetch(G.userinfoUrl(), { headers: { Authorization: `Bearer ${t.access_token}` } }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
     db.prepare(`INSERT INTO google_accounts (user_id, email, refresh_token, access_token, expires_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT (user_id) DO UPDATE SET email = excluded.email, refresh_token = excluded.refresh_token,
@@ -267,7 +267,7 @@ calendarRouter.post('/google/sync', async (req, res) => {
   res.json({ ...status(req.user.id), stats });
 });
 
-// Disconnect. ?remove_events=1 first deletes the events Rackboard created.
+// Disconnect. ?remove_events=1 first deletes the events Raccboard created.
 calendarRouter.delete('/google', async (req, res) => {
   const acc = account(req.user.id);
   if (acc) {

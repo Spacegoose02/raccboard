@@ -15,7 +15,7 @@ RUN npm run build && npm prune --omit=dev
 # ---- runtime ----
 FROM node:22-slim
 ARG VERSION=dev
-LABEL org.opencontainers.image.title="Rackboard" \
+LABEL org.opencontainers.image.title="Raccboard" \
       org.opencontainers.image.description="Self-hosted Kanban boards with lists, sublists, sharing, calendars and themes." \
       org.opencontainers.image.source="https://github.com/Spacegoose02/rackboard" \
       org.opencontainers.image.licenses="MIT" \

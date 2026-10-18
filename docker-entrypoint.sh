@@ -1,5 +1,5 @@
 #!/bin/sh
-# Make /data writable by PUID:PGID, then run Rackboard as that user.
+# Make /data writable by PUID:PGID, then run Raccboard as that user.
 # Defaults match Unraid (nobody:users = 99:100). If the container is started with --user,
 # it is already unprivileged and runs as-is.
 set -e

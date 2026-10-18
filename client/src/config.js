@@ -1,5 +1,5 @@
 // Branding lives here so the app is easy to rename.
-export const APP_NAME = 'Rackboard';
+export const APP_NAME = 'Raccboard';
 export const APP_MASCOT = '🦝';
 
 export const THEMES = [

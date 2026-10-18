@@ -44,7 +44,7 @@ const smtp = net.createServer((sock) => {
 });
 await new Promise((r) => smtp.listen(SMTP_PORT, r));
 
-/* ---------- Rackboard ---------- */
+/* ---------- Raccboard ---------- */
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rb-email-'));
 const server = spawn(process.execPath, ['server/index.js'], {
   env: { ...process.env, PORT: String(APP_PORT), DATA_DIR: dataDir, PUBLIC_URL: APP },
@@ -72,7 +72,7 @@ try {
   const early = await call('POST', `/cards/${card.id}/email`, { to: 'a@example.com' });
   check(early.status === 400, 'sending without a mail server is refused');
 
-  const saved = await json('PUT', '/email/settings', { host: 'localhost', port: String(SMTP_PORT), secure: 'false', user: 'smtp-user', pass: 'smtp-secret', from: 'Rackboard <kanban@example.com>' });
+  const saved = await json('PUT', '/email/settings', { host: 'localhost', port: String(SMTP_PORT), secure: 'false', user: 'smtp-user', pass: 'smtp-secret', from: 'Raccboard <kanban@example.com>' });
   check(saved.configured && saved.has_password && !('pass' in saved), 'admin saves SMTP settings; the password is never returned');
   await json('PUT', '/email/settings', { host: 'localhost', pass: '' });
   check((await json('GET', '/email/status')).has_password, 'saving with a blank password keeps the old one');

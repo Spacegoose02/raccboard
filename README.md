@@ -1,9 +1,9 @@
-# 🦝 Rackboard
+# 🦝 Raccboard
 
 A self-hosted Kanban board for lists, lists of lists, and room-by-room house projects.
 Runs as a single Node process with a single SQLite file, so it is easy to back up and easy to run on a home server.
 
-> "Rackboard" is a working name. To rename it, change `APP_NAME` in `client/src/config.js`, the `<title>` in `client/index.html`, and `name` in `package.json`.
+> **About the name:** the app is called **Raccboard** (formerly Rackboard). Some technical identifiers deliberately still say `rackboard` so existing installs keep working: the GitHub repo, the Docker image `ghcr.io/spacegoose02/rackboard`, the database file `rackboard.db`, the Android package id `app.rackboard`, browser storage keys, and calendar event IDs.
 
 ## Features
 
@@ -86,7 +86,7 @@ Or use Compose: `docker compose up -d` with the included `docker-compose.yml`. T
 
 The image is based on `node:22-slim`. It exposes port 3000, declares `VOLUME /data`, and has a health check at `/api/health`.
 
-**Permissions (PUID/PGID):** the container starts as root only long enough to give `/data` to `PUID:PGID`, then runs Rackboard as that user. The defaults are `99:100` (Unraid's `nobody:users`). On other systems set them to your user, e.g. `-e PUID=1000 -e PGID=1000`. If you start the container with `--user`, it skips this step and runs as that user.
+**Permissions (PUID/PGID):** the container starts as root only long enough to give `/data` to `PUID:PGID`, then runs Raccboard as that user. The defaults are `99:100` (Unraid's `nobody:users`). On other systems set them to your user, e.g. `-e PUID=1000 -e PGID=1000`. If you start the container with `--user`, it skips this step and runs as that user.
 
 ### Unraid
 
@@ -112,13 +112,13 @@ Copy the `data/` folder: it holds `rackboard.db` (plus WAL files) and `uploads/`
 
 ## Accounts and sign-in
 
-On first start, Rackboard asks you to create the first account, which becomes the **admin**. Existing boards from before accounts are kept. Admins add everyone else in **Settings → Users**, or turn on `ALLOW_SIGNUP=true` so people can sign up themselves.
+On first start, Raccboard asks you to create the first account, which becomes the **admin**. Existing boards from before accounts are kept. Admins add everyone else in **Settings → Users**, or turn on `ALLOW_SIGNUP=true` so people can sign up themselves.
 
 Everyone has a profile with a display name, email, and avatar: one of 12 raccoons, an uploaded photo, or initials. Comments and activity show who did what. Passwords are hashed with scrypt. Sessions last 30 days and renew with use. In the browser the session is an HttpOnly cookie; the Android app uses a bearer token. Changing your password signs out your other devices.
 
 ### Locked out? Reset a password from the server
 
-Admins can reset anyone's password in **Settings → Users**. If no admin can sign in, use the recovery command inside the container. On Unraid: Docker tab → Rackboard icon → **Console**, or from any shell:
+Admins can reset anyone's password in **Settings → Users**. If no admin can sign in, use the recovery command inside the container. On Unraid: Docker tab → Raccboard icon → **Console**, or from any shell:
 
 ```bash
 docker exec -it rackboard node server/cli.js list-users
@@ -126,7 +126,7 @@ docker exec -it rackboard node server/cli.js reset-password <username> '<new pas
 docker exec -it rackboard node server/cli.js make-admin <username>
 ```
 
-It works while Rackboard is running, signs that user out everywhere, and keeps `/data` owned by `PUID:PGID`. Without Docker, run `node server/cli.js …` in the app folder with the same `DATA_DIR`.
+It works while Raccboard is running, signs that user out everywhere, and keeps `/data` owned by `PUID:PGID`. Without Docker, run `node server/cli.js …` in the app folder with the same `DATA_DIR`.
 
 ### Sharing, teams and card members
 
@@ -163,11 +163,11 @@ OIDC sign-in uses the browser (web and PWA). To use the Android app with an SSO 
 
 ## Calendars
 
-Settings → **Calendar** offers three ways to see your dates outside Rackboard, from simplest to most automatic:
+Settings → **Calendar** offers three ways to see your dates outside Raccboard, from simplest to most automatic:
 
 1. **Add to calendar** on any card with a due date: opens a prefilled Google Calendar event, or downloads an `.ics` file for Apple Calendar or Outlook.
 2. **Calendar feed**: a private `.ics` link with everything dated on the boards you can open. Subscribe to it from Google Calendar (*Other calendars → From URL*), Apple Calendar or Outlook. Google can only reach the feed if your server is reachable from the internet, and refreshes it every few hours. **Reset link** stops the old URL from working.
-3. **Google Calendar sync**: pushes dates from boards you pick into a Google calendar you pick, within seconds of a change. It's one-way (Rackboard → Google), and there's a full re-check every 10 minutes. Cards with a start date become multi-day all-day events; timed due dates become 30-minute events; sublists and checklist items get their own events.
+3. **Google Calendar sync**: pushes dates from boards you pick into a Google calendar you pick, within seconds of a change. It's one-way (Raccboard → Google), and there's a full re-check every 10 minutes. Cards with a start date become multi-day all-day events; timed due dates become 30-minute events; sublists and checklist items get their own events.
 
 To turn on Google sync, an admin creates an OAuth client in Google Cloud:
 1. In Google Cloud Console, create a project and enable the **Google Calendar API**.
@@ -187,7 +187,7 @@ An admin sets up the mail server in **Settings → Email**, or with `SMTP_HOST`,
 
 ### Install from the browser (PWA)
 
-Open the site on your phone and choose **Install app** or **Add to Home screen**. Chrome only offers a full install over HTTPS (or on localhost). On plain `http://192.168.x.x` you get a home-screen shortcut instead. If you want the full install, put Rackboard behind a reverse proxy with a certificate (for example Nginx Proxy Manager, Caddy or Tailscale). Otherwise use the APK.
+Open the site on your phone and choose **Install app** or **Add to Home screen**. Chrome only offers a full install over HTTPS (or on localhost). On plain `http://192.168.x.x` you get a home-screen shortcut instead. If you want the full install, put Raccboard behind a reverse proxy with a certificate (for example Nginx Proxy Manager, Caddy or Tailscale). Otherwise use the APK.
 
 ### Android APK
 
@@ -199,7 +199,7 @@ Build it locally. This needs **JDK 21** and the Android SDK, with `ANDROID_HOME`
 npm run android:apk
 ```
 
-The debug APK is written to `release/Rackboard-<version>-debug.apk`. To sideload it, copy it to the phone and open it (allow "install unknown apps" for your file manager). `npm run android:open` opens the project in Android Studio.
+The debug APK is written to `release/Raccboard-<version>-debug.apk`. To sideload it, copy it to the phone and open it (allow "install unknown apps" for your file manager). `npm run android:open` opens the project in Android Studio.
 
 You can also build it in GitHub Actions: run the **Android APK** workflow manually or push a `v*` tag, then download the APK from the run's artifacts.
 

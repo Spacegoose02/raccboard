@@ -1,4 +1,4 @@
-// End-to-end OIDC check: runs a tiny mock identity provider and a Rackboard server pointed at it,
+// End-to-end OIDC check: runs a tiny mock identity provider and a Raccboard server pointed at it,
 // then follows the browser redirect flow. Usage: node scripts/smoke-oidc.js
 import http from 'node:http';
 import { spawn } from 'node:child_process';
@@ -70,7 +70,7 @@ const idp = http.createServer(async (req, res) => {
 });
 await new Promise((r) => idp.listen(IDP_PORT, r));
 
-/* ---------- Rackboard pointed at the mock ---------- */
+/* ---------- Raccboard pointed at the mock ---------- */
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rb-oidc-'));
 const server = spawn(process.execPath, ['server/index.js'], {
   env: { ...process.env, PORT: String(APP_PORT), DATA_DIR: dataDir, OIDC_ISSUER: ISSUER, OIDC_CLIENT_ID: CLIENT_ID, OIDC_CLIENT_SECRET: CLIENT_SECRET, OIDC_NAME: 'Mock IdP', PUBLIC_URL: APP },

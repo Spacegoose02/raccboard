@@ -1,6 +1,6 @@
 {
   "appId": "app.rackboard",
-  "appName": "Rackboard",
+  "appName": "Raccboard",
   "webDir": "client/dist",
   "server": {
     "androidScheme": "http",
