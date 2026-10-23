@@ -51,7 +51,7 @@
 
 ## Phase 4: Extras
 
-- [ ] **Homeboard**: a board template for house projects (rooms as lists, projects as cards, materials as checklists)
+- [x] **Homeboard**: a board template for house projects (rooms as lists, projects as cards, materials as checklists)
 - [ ] Create cards from email (inbound address per board)
 - [ ] More themes and a custom theme editor
 - [ ] Raccoon branding: logo, empty states, illustrations
@@ -60,4 +60,5 @@
 - [ ] Docker Hub mirror and Unraid Community Applications listing
 - [ ] Signed release APK (keystore in CI secrets), then Play Store / F-Droid listing
 - [ ] Offline edits in the app with sync when the server is reachable
-- [ ] Import from Trello JSON
+- [x] Import from Trello JSON
+- [x] Card covers, search and label/due filters, keyboard shortcuts, copy card, card and board templates, Butler-style automation rules

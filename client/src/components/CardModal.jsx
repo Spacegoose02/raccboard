@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { api, apiUrl } from '../api.js';
 import { COLORS } from '../config.js';
 import { dueStatus, formatDate, timeAgo } from '../dates.js';
-import { ColorPicker, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
+import { CardCover, ColorPicker, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
 import { useAuth, userById } from '../auth.js';
 import { Avatar } from './Avatar.jsx';
 import EmailCard from './EmailCard.jsx';
@@ -12,10 +12,10 @@ import EmailCard from './EmailCard.jsx';
 const mdComponents = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" /> };
 const Markdown = ({ children }) => <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{children}</ReactMarkdown></div>;
 
-export default function CardModal({ cardId, labels, people = [], onChanged, onClose }) {
+export default function CardModal({ cardId, labels, people = [], lists = [], onChanged, onClose }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
-  const [pop, setPop] = useState(null); // 'labels' | 'dates' | 'checklist' | 'members'
+  const [pop, setPop] = useState(null); // 'labels' | 'dates' | 'checklist' | 'members' | 'cover' | 'copy'
   const { user: me } = useAuth();
   const fileRef = useRef(null);
 
@@ -65,12 +65,18 @@ export default function CardModal({ cardId, labels, people = [], onChanged, onCl
           <div className="spacer" />
           <EmailCard card={card} people={people} attachmentCount={attachments.length} onSent={load} />
           {canEdit && <Menu items={[
+            { label: '⧉ Copy card', onClick: () => setPop('copy') },
+            { label: card.is_template ? '▣ Turn back into a normal card' : '▣ Make this a template', onClick: () => patchCard({ is_template: !card.is_template }) },
             { label: 'Archive card', onClick: async () => { await patchCard({ archived: true }); onClose(); } },
             { label: 'Delete card', danger: true, onClick: async () => { if (confirm('Delete this card permanently?')) { await api.del(`/cards/${card.id}`); onChanged(); onClose(); } } },
           ]} />}
           <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
         {card.archived ? <div className="archived-banner">This card is archived. {canEdit && <button className="btn" onClick={() => patchCard({ archived: false })}>Restore</button>}</div> : null}
+
+        {card.cover && <CardCover cover={card.cover} big />}
+        {card.is_template ? <div className="archived-banner">▣ This card is a template. Use the list ⋯ menu to make new cards from it.</div> : null}
+        {pop === 'copy' && <CopyCard card={card} lists={lists} onClose={() => setPop(null)} onCopied={() => { setPop(null); onChanged(); }} />}
 
         <div className="modal-body">
           <div className="modal-main">
@@ -87,6 +93,7 @@ export default function CardModal({ cardId, labels, people = [], onChanged, onCl
               <button className="btn" onClick={() => setPop('dates')}>🕑 Dates</button>
               <button className="btn" onClick={() => setPop('checklist')}>☑ Checklist</button>
               <button className="btn" onClick={() => fileRef.current?.click()}>📎 Attachment</button>
+              <button className="btn" onClick={() => setPop('cover')}>🖼 Cover</button>
               <input ref={fileRef} type="file" multiple hidden onChange={(e) => { upload([...e.target.files]); e.target.value = ''; }} />
               {pop === 'members' && (
                 <Popover title="Members" onClose={() => setPop(null)}>
@@ -100,6 +107,26 @@ export default function CardModal({ cardId, labels, people = [], onChanged, onCl
                     ))}
                   </div>
                   <p className="muted small">Only people the board is shared with can be added.</p>
+                </Popover>
+              )}
+              {pop === 'cover' && (
+                <Popover title="Cover" onClose={() => setPop(null)}>
+                  <div className="cover-colors">
+                    {COLORS.map((c) => (
+                      <button key={c} className={`swatch ${card.cover === `color:${c}` ? 'selected' : ''}`} style={{ background: c }} aria-label={`Cover ${c}`}
+                        onClick={() => patchCard({ cover: `color:${c}` })} />
+                    ))}
+                  </div>
+                  {attachments.some((a) => a.mime?.startsWith('image/')) ? (
+                    <div className="cover-images">
+                      {attachments.filter((a) => a.mime?.startsWith('image/')).map((a) => (
+                        <button key={a.id} className={card.cover === `image:${a.id}` ? 'selected' : ''} onClick={() => patchCard({ cover: `image:${a.id}` })} title={a.filename}>
+                          <img src={apiUrl(`/attachments/${a.id}?inline=1`)} alt={a.filename} />
+                        </button>
+                      ))}
+                    </div>
+                  ) : <p className="muted small">Attach an image to use it as a cover.</p>}
+                  {card.cover && <button className="btn wide" onClick={() => patchCard({ cover: null })}>Remove cover</button>}
                 </Popover>
               )}
               {pop === 'labels' && <LabelsPopover card={card} labels={labels} run={run} onClose={() => setPop(null)} />}
@@ -165,6 +192,9 @@ export default function CardModal({ cardId, labels, people = [], onChanged, onCl
                       <a href={apiUrl(`/attachments/${a.id}`)} className="att-name">{a.filename}</a>
                       <span className="muted">{formatSize(a.size)} · added {timeAgo(a.created_at)}</span>
                     </div>
+                    {canEdit && a.mime?.startsWith('image/') && card.cover !== `image:${a.id}` && (
+                      <button className="btn subtle" onClick={() => patchCard({ cover: `image:${a.id}` })}>Make cover</button>
+                    )}
                     {canEdit && <button className="btn danger subtle" onClick={() => confirm(`Delete ${a.filename}?`) && run(() => api.del(`/attachments/${a.id}`))}>Delete</button>}
                   </div>
                 ))}
@@ -507,5 +537,32 @@ function AddToCalendar({ card }) {
         </Popover>
       )}
     </span>
+  );
+}
+
+function CopyCard({ card, lists, onClose, onCopied }) {
+  const [title, setTitle] = useState(card.is_template ? card.title.replace(/template/i, '').trim() || card.title : `${card.title} (copy)`);
+  const [listId, setListId] = useState(card.list_id);
+  const [keep, setKeep] = useState({ checklists: true, labels: true, members: true, dates: true, attachments: false });
+  const [busy, setBusy] = useState(false);
+  const copy = async () => {
+    setBusy(true);
+    try { await api.post(`/cards/${card.id}/copy`, { title, list_id: listId, keep }); onCopied(); } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Popover title="Copy card" onClose={onClose} className="copy-pop">
+      <div className="stack">
+        <label className="field">Title<input autoFocus value={title} maxLength={300} onChange={(e) => setTitle(e.target.value)} /></label>
+        <label className="field">To list
+          <select value={listId} onChange={(e) => setListId(e.target.value)}>{lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+        </label>
+        <div className="stack">
+          {Object.keys(keep).map((k) => (
+            <label key={k} className="check-row"><input type="checkbox" checked={keep[k]} onChange={() => setKeep((x) => ({ ...x, [k]: !x[k] }))} /> Keep {k}</label>
+          ))}
+        </div>
+        <button className="btn primary" disabled={busy || !title.trim()} onClick={copy}>{busy ? 'Copying…' : 'Create card'}</button>
+      </div>
+    </Popover>
   );
 }

@@ -19,6 +19,13 @@ Runs as a single Node process with a single SQLite file, so it is easy to back u
   - **Comments and activity** panel: a comment box plus an activity log (card created, moved, completed, labels, dates, checklist items, attachments)
 - **Card face**: label chips, dates, checklist progress, comment and attachment counts.
 - **Three views per board** (top of the board): **Board**, **List** (a sortable, searchable table) and **Calendar** (a month view of cards, sublists, checklist items and lists; drag an entry to another day to reschedule it). **📅 Calendar** in the top bar shows every board at once.
+- **Card covers**: a color band or one of the card's images on top of the card (🖼 Cover in the card, or **Make cover** on an image attachment).
+- **Search and filters**: search titles and descriptions, and filter by label, due date (overdue, next 24 hours, this week, none, not complete) and member.
+- **Keyboard shortcuts**: `/` search, `n` new card, `q` my cards, `x` clear filters, `b`/`l`/`c` switch views, `?` show them all.
+- **Copy cards and card templates**: copy a card to any list (choose what to keep). Mark a card as a template, then use **+ New card from …** in a list's ⋯ menu.
+- **Board templates and copies**: start from Simple Kanban, **Homeboard** (house projects by room), Weekly planner or Project tracker, or copy an existing board with its lists, cards and rules.
+- **⚡ Automation** (like Trello's Butler): rules such as *when a card is moved to "Done", mark it complete* or *when every checklist item is done, add label "Ready"*. Triggers are card added, moved, completed or checklist finished, optionally in one list. Actions are complete, incomplete, archive, move, add or remove a label, add the person, set or remove the due date.
+- **Import from Trello**: on the home screen, upload a board's JSON export (Trello: board menu → Print, export and share → Export as JSON). Lists, cards, labels, covers, dates, checklists and comments come across, and attachment links are added to the description.
 - **Labels as custom statuses**: each board starts with *In progress*, *Cancelled*, *Future* and *Done*. You can rename, recolor, add or delete them.
 - **Archived items** drawer on each board, where you can restore or permanently delete lists and cards.
 - **Settings in one place**: your display name, theme, and per-board settings (rename, color, label editor, complete/archive/delete). Open them from the board with **⚙ Board settings**.

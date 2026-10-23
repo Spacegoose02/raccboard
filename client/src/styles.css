@@ -720,3 +720,37 @@ button, a, .card, .chip { touch-action: manipulation; -webkit-tap-highlight-colo
   .pager-count { font-size: 11px; opacity: 0.8; }
   .lists { padding-bottom: 8px; }
 }
+
+/* ---------- Card covers, templates, search and shortcuts ---------- */
+.card.has-cover { padding-top: 0; overflow: hidden; }
+.card-cover { margin: 0 -10px 8px; }
+.card-cover.color { height: 32px; }
+.card-cover.image img { display: block; width: 100%; max-height: 160px; object-fit: cover; }
+.card-cover.big { margin: 0 0 12px; border-radius: 8px; overflow: hidden; }
+.card-cover.big.color { height: 64px; }
+.card-cover.big.image img { max-height: 220px; }
+.template-badge { display: inline-block; margin-bottom: 6px; background: var(--btn-bg); color: var(--muted); font-size: 11px; }
+.filter-bar select, .new-rule select, .new-rule input { width: auto; }
+.board-search { width: auto; min-width: 180px; max-width: 260px; flex: 1 1 180px; min-height: 30px; padding: 4px 10px; border-radius: 16px; }
+.due-filter { min-height: 30px; border-radius: 16px; padding: 2px 8px; }
+.chip.label-filter { padding-left: 8px; }
+.label-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--label); display: inline-block; }
+.keys-pop { position: fixed; right: 16px; top: 120px; z-index: 50; }
+.shortcuts { margin: 0; display: grid; gap: 6px; }
+.shortcuts div { display: flex; gap: 10px; align-items: center; }
+.shortcuts dt { min-width: 44px; }
+.shortcuts dd { margin: 0; }
+kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; font-size: 12px; background: var(--btn-bg); }
+.cover-colors { display: flex; flex-wrap: wrap; gap: 6px; }
+.cover-images { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.cover-images button { padding: 0; border: 2px solid transparent; border-radius: 6px; overflow: hidden; background: none; height: 56px; }
+.cover-images button.selected { border-color: var(--accent); }
+.cover-images img { width: 100%; height: 100%; object-fit: cover; }
+.rules { display: grid; gap: 8px; }
+.rule-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.rule-row.off { opacity: 0.55; }
+.rule-row .grow { flex: 1; }
+.new-rule { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (max-width: 700px) { .board-search { min-width: 140px; } .keys-pop { display: none; } }
+.check-row { display: flex; align-items: center; gap: 8px; text-transform: capitalize; }
+.drawer.wide-drawer { width: min(560px, 100%); }

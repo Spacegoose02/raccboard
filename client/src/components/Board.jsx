@@ -9,13 +9,14 @@ import { CSS } from '@dnd-kit/utilities';
 import { api } from '../api.js';
 import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
-import { dueStatus, formatDate } from '../dates.js';
-import { CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
+import { dueStatus, formatDate, parseDate } from '../dates.js';
+import { CardCover, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
 import { Avatar } from './Avatar.jsx';
 import { ShareDialog } from './Share.jsx';
 const CardModal = lazy(() => import('./CardModal.jsx'));
 const ListView = lazy(() => import('./ListView.jsx'));
 const CalendarView = lazy(() => import('./CalendarView.jsx'));
+const Automations = lazy(() => import('./Automations.jsx'));
 
 const VIEWS = [
   { id: 'board', label: '▥ Board' },
@@ -40,6 +41,7 @@ export default function Board({ boardId, cardId }) {
   const [active, setActive] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   // Phone list pager: which list is in view, and jumping to one.
   const listsRef = useRef(null);
   const [pagerIndex, setPagerIndex] = useState(0);
@@ -58,8 +60,10 @@ export default function Board({ boardId, cardId }) {
   };
   const [view, setViewState] = useState(() => savedView(boardId));
   const setView = (v) => { setViewState(v); try { localStorage.setItem(viewKey(boardId), v); } catch { /* storage blocked */ } };
-  // Card filter: selected member ids, and "only my cards".
-  const [filter, setFilter] = useState({ members: [], mine: false });
+  // Card filter: search text, labels, due window, selected member ids and "only my cards".
+  const [filter, setFilter] = useState(NO_FILTER);
+  const searchRef = useRef(null);
+  const [showKeys, setShowKeys] = useState(false);
   const { user: me } = useAuth();
   const colsRef = useRef(cols);
   colsRef.current = cols;
@@ -92,15 +96,40 @@ export default function Board({ boardId, cardId }) {
   const listsById = useMemo(() => Object.fromEntries((data?.lists || []).map((l) => [l.id, l])), [data]);
   const labelsById = useMemo(() => Object.fromEntries((data?.labels || []).map((l) => [l.id, l])), [data]);
   const peopleById = useMemo(() => Object.fromEntries((data?.people || []).map((p) => [p.id, p])), [data]);
-  const filterKey = `${filter.mine}|${filter.members.join(',')}`;
   const keepEvent = useCallback((e) => {
-    if (!filter.mine && !filter.members.length) return true;
+    if (!isFiltering(filter)) return true;
     const card = e.card_id && cardsById[e.card_id];
-    if (!card) return false;
-    if (filter.mine && !card.member_ids.includes(me?.id)) return false;
-    return !filter.members.length || filter.members.some((id) => card.member_ids.includes(id));
+    return !!card && cardMatches(card, filter, me?.id);
+  }, [filter, cardsById, me?.id]);
+
+  // Keyboard shortcuts (ignored while typing or when a card is open).
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target.tagName;
+      if (e.metaKey || e.ctrlKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || e.target.isContentEditable) {
+        if (e.key === 'Escape' && e.target === searchRef.current) { setFilter((f) => ({ ...f, text: '' })); e.target.blur(); }
+        return;
+      }
+      if (cardId) return;
+      const actions = {
+        '/': () => searchRef.current?.focus(),
+        f: () => searchRef.current?.focus(),
+        q: () => setFilter((f) => ({ ...f, mine: !f.mine })),
+        x: () => setFilter(NO_FILTER),
+        b: () => setView('board'),
+        l: () => setView('list'),
+        c: () => setView('calendar'),
+        n: () => document.querySelector('.list .composer-open')?.click(),
+        '?': () => setShowKeys((s) => !s),
+        Escape: () => { setShowKeys(false); setFilter(NO_FILTER); },
+      };
+      const act = actions[e.key];
+      if (act) { e.preventDefault(); act(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey, cardsById, me?.id]);
+  }, [cardId]);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -220,15 +249,17 @@ export default function Board({ boardId, cardId }) {
   const role = board.my_role;
   const canEdit = role === 'editor' || role === 'owner';
   const isOwner = role === 'owner';
-  const filtering = filter.mine || filter.members.length > 0;
-  const shows = (card) => {
-    if (filter.mine && !card.member_ids.includes(me.id)) return false;
-    if (filter.members.length && !filter.members.some((id) => card.member_ids.includes(id))) return false;
-    return true;
+  const filtering = isFiltering(filter);
+  const shows = (card) => cardMatches(card, filter, me.id);
+  const toggleIn = (key, id) => setFilter((f) => ({ ...f, [key]: f[key].includes(id) ? f[key].filter((x) => x !== id) : [...f[key], id] }));
+  const toggleMemberFilter = (id) => toggleIn('members', id);
+  const templates = data.cards.filter((c) => c.is_template);
+  const addFromTemplate = async (listId, tpl) => {
+    try { await api.post(`/cards/${tpl.id}/copy`, { list_id: listId }); } catch (e) { alert(e.message); }
+    load();
   };
-  const toggleMemberFilter = (id) => setFilter((f) => ({ ...f, members: f.members.includes(id) ? f.members.filter((x) => x !== id) : [...f.members, id] }));
   // Dragging is off for viewers, and while filtering (hidden cards would make positions ambiguous).
-  const ctx = { cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering };
+  const ctx = { cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate };
 
   return (
     <div className="board" style={{ '--board-accent': board.color || 'var(--accent)' }}>
@@ -249,27 +280,51 @@ export default function Board({ boardId, cardId }) {
         </div>
         <button className="btn subtle" onClick={() => setShowShare(true)}>👪 {isOwner ? 'Share' : 'Members'}</button>
         {isOwner && <a className="btn subtle wide-only" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>}
+        {canEdit && <button className="btn subtle wide-only" onClick={() => setShowRules(true)} title="Automation rules">⚡ Automation</button>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowArchived(true)}>🗃 Archived items</button>}
         {isOwner && <button className="btn subtle wide-only" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen board' : '✓ Complete board'}</button>}
         {canEdit && (
           <Menu className="narrow-only" items={[
             isOwner && { label: '⚙ Board settings', onClick: () => navigate(`/settings/board/${boardId}`) },
+            { label: '⚡ Automation', onClick: () => setShowRules(true) },
             { label: '🗃 Archived items', onClick: () => setShowArchived(true) },
             isOwner && { label: board.completed_at ? '↺ Reopen board' : '✓ Complete board', onClick: toggleBoardComplete },
           ]} />
         )}
       </div>
-      {data.people.length > 1 && (
-        <div className="filter-bar">
-          <span className="muted small">Filter:</span>
+      <div className="filter-bar">
+        <input ref={searchRef} className="board-search" type="search" placeholder="Search cards…  ( / )" value={filter.text}
+          onChange={(e) => setFilter((f) => ({ ...f, text: e.target.value }))} aria-label="Search cards" />
+        <select className="due-filter" value={filter.due} onChange={(e) => setFilter((f) => ({ ...f, due: e.target.value }))} aria-label="Filter by due date">
+          <option value="">Any date</option>
+          <option value="overdue">Overdue</option>
+          <option value="day">Due in 24h</option>
+          <option value="week">Due this week</option>
+          <option value="none">No due date</option>
+          <option value="incomplete">Not complete</option>
+        </select>
+        {data.labels.filter((l) => l.name || l.color).map((l) => (
+          <button key={l.id} className={`chip label-filter ${filter.labels.includes(l.id) ? 'on' : ''}`} style={{ '--label': l.color }} onClick={() => toggleIn('labels', l.id)} title={`Label: ${l.name}`}>
+            <span className="label-dot" />{l.name || ' '}
+          </button>
+        ))}
+        {data.people.length > 1 && <>
           <button className={`chip ${filter.mine ? 'on' : ''}`} onClick={() => setFilter((f) => ({ ...f, mine: !f.mine }))}>My cards</button>
           {data.people.map((p) => (
             <button key={p.id} className={`chip person ${filter.members.includes(p.id) ? 'on' : ''}`} onClick={() => toggleMemberFilter(p.id)} title={p.display_name}>
               <Avatar user={p} size={20} /><span className="hide-sm">{p.display_name.split(' ')[0]}</span>
             </button>
           ))}
-          {filtering && <button className="link-btn small" onClick={() => setFilter({ members: [], mine: false })}>Clear</button>}
-        </div>
+        </>}
+        {filtering && <button className="link-btn small" onClick={() => setFilter(NO_FILTER)}>Clear ({data.cards.filter(shows).length} shown)</button>}
+        <button className="icon-btn wide-only" title="Keyboard shortcuts (?)" onClick={() => setShowKeys(true)}>⌨</button>
+      </div>
+      {showKeys && (
+        <Popover title="Keyboard shortcuts" onClose={() => setShowKeys(false)} className="keys-pop">
+          <dl className="shortcuts">
+            {SHORTCUTS.map(([k, what]) => <div key={k}><dt><kbd>{k}</kbd></dt><dd>{what}</dd></div>)}
+          </dl>
+        </Popover>
       )}
 
       <Suspense fallback={<p className="muted loading-view">Loading…</p>}>
@@ -315,16 +370,49 @@ export default function Board({ boardId, cardId }) {
           cardId={cardId}
           labels={data.labels}
           people={data.people}
+          lists={data.lists}
           onChanged={load}
           onClose={() => navigate(`/b/${boardId}`)}
         />
         </Suspense>
       )}
       {showShare && <ShareDialog boardId={boardId} onClose={() => setShowShare(false)} onChanged={load} />}
+      {showRules && (
+        <div className="drawer-backdrop" onClick={() => { setShowRules(false); load(); }}>
+          <aside className="drawer wide-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-head"><h3>⚡ Automation</h3><button className="icon-btn" onClick={() => { setShowRules(false); load(); }}>✕</button></div>
+            <Suspense fallback={<p className="muted">Loading…</p>}><Automations boardId={boardId} lists={data.lists} labels={data.labels} canEdit={canEdit} /></Suspense>
+          </aside>
+        </div>
+      )}
       {showArchived && <ArchivedDrawer boardId={boardId} onClose={() => setShowArchived(false)} onChanged={load} />}
     </div>
   );
 }
+
+const NO_FILTER = { members: [], mine: false, text: '', labels: [], due: '' };
+const isFiltering = (f) => f.mine || f.members.length > 0 || f.labels.length > 0 || !!f.due || !!f.text.trim();
+function cardMatches(card, f, meId) {
+  if (f.mine && !card.member_ids.includes(meId)) return false;
+  if (f.members.length && !f.members.some((id) => card.member_ids.includes(id))) return false;
+  if (f.labels.length && !f.labels.some((id) => card.label_ids.includes(id))) return false;
+  const q = f.text.trim().toLowerCase();
+  if (q && !`${card.title}\n${card.description}`.toLowerCase().includes(q)) return false;
+  if (f.due) {
+    const d = parseDate(card.due_date);
+    const left = d ? d.getTime() - Date.now() : null;
+    if (f.due === 'none' && d) return false;
+    if (f.due === 'incomplete' && card.completed) return false;
+    if (f.due === 'overdue' && !(d && left < 0 && !card.completed)) return false;
+    if (f.due === 'day' && !(d && left >= 0 && left < 864e5)) return false;
+    if (f.due === 'week' && !(d && left >= 0 && left < 7 * 864e5)) return false;
+  }
+  return true;
+}
+const SHORTCUTS = [
+  ['/', 'Search cards'], ['n', 'Add a card to the first list'], ['q', 'Toggle "My cards"'], ['x', 'Clear filters'],
+  ['b', 'Board view'], ['l', 'List view'], ['c', 'Calendar view'], ['Esc', 'Close card / clear filters'], ['?', 'Show these shortcuts'],
+];
 
 function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: LIST + list.id, data: { type: 'list' }, disabled: !ctx.canDrag });
@@ -360,6 +448,7 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards })
           { label: 'Collapse list', onClick: () => onUpdate(list.id, { collapsed: true }) },
           { label: 'Archive list', onClick: () => onUpdate(list.id, { archived: true }) },
           cardIds.length > 0 && { label: 'Archive all cards in this list', onClick: () => onArchiveCards(list) },
+          ...ctx.templates.map((t) => ({ label: `+ New card from "${t.title}"`, onClick: () => ctx.addFromTemplate(list.id, t) })),
         ]} />
         </>}
       </div>
@@ -411,8 +500,10 @@ function CardFace({ card, ctx, overlay }) {
   const due = dueStatus(card.due_date, card.completed);
   const checkDone = card.check_total > 0 && card.check_done === card.check_total;
   return (
-    <div className={`card ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''}`}
+    <div className={`card ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''} ${card.cover ? 'has-cover' : ''}`}
       onClick={() => !overlay && navigate(`/b/${ctx.boardId}/c/${card.id}`)}>
+      <CardCover cover={card.cover} />
+      {card.is_template ? <span className="badge template-badge">▣ Template</span> : null}
       {labels.length > 0 && (
         <div className="card-labels">
           {labels.map((l) => <span key={l.id} className="label-chip" style={{ background: l.color }}>{l.name}</span>)}
