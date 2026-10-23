@@ -290,6 +290,14 @@ api.patch('/cards/:id', (req, res) => {
     const log = (t) => logActivity(card.board_id, card.id, req.who, t);
     if ('completed' in b && bool(b.completed) !== card.completed) log(b.completed ? 'marked this card complete' : 'marked this card incomplete');
     if ('archived' in b && bool(b.archived) !== card.archived) log(b.archived ? 'archived this card' : 'restored this card');
+    // Restoring a card whose list is archived would leave it invisible, so bring the list back too.
+    if ('archived' in b && !b.archived) {
+      const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(card.list_id);
+      if (list.archived) {
+        db.prepare('UPDATE lists SET archived = 0 WHERE id = ?').run(list.id);
+        log(`restored list "${list.name}" with this card`);
+      }
+    }
     if ('title' in b && str(b.title) && str(b.title, 300) !== card.title) log(`renamed this card to "${str(b.title, 300)}"`);
     if ('description' in b && b.description !== card.description) log('updated the description');
     if ('due_date' in b && dateOrNull(b.due_date) !== card.due_date) log(b.due_date ? `set the due date to ${b.due_date}` : 'removed the due date');
