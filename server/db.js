@@ -195,6 +195,16 @@ const migrations = [
     value TEXT
   );
   `,
+  // v7: one-time password reset links (stored hashed)
+  `
+  CREATE TABLE password_resets (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_sessions_expires ON sessions(expires_at);
+  `,
 ];
 
 function migrate() {

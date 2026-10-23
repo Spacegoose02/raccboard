@@ -116,6 +116,18 @@ On first start, Raccboard asks you to create the first account, which becomes th
 
 Everyone has a profile with a display name, email, and avatar: one of 12 raccoons, an uploaded photo, or initials. Comments and activity show who did what. Passwords are hashed with scrypt. Sessions last 30 days and renew with use. In the browser the session is an HttpOnly cookie; the Android app uses a bearer token. Changing your password signs out your other devices.
 
+### Forgot password
+
+Once email is set up (Settings → Email), the sign-in page shows **Forgot password?**. People enter their username or email and get a one-time link that works for 30 minutes. Using it signs them out everywhere else. Accounts without an email address still need an admin or the recovery CLI below.
+
+### Security notes
+
+- Passwords are hashed with scrypt; sessions and reset links are stored only as SHA-256 hashes.
+- Sign-in is throttled per IP and username (10 failures / 15 min) and per IP (50 / 15 min).
+- The web app sends a strict Content-Security-Policy, `X-Frame-Options: DENY` and `nosniff`. Uploaded files that a browser could run (HTML, SVG…) are always downloaded, never shown inline.
+- Cookie-authenticated changes from another site are refused. Put Raccboard behind HTTPS and set `TRUST_PROXY=true` so cookies are marked `Secure`.
+- Non-admins can't see other people's email addresses.
+
 ### Locked out? Reset a password from the server
 
 Your **username** is what you type to sign in; it's lowercase and separate from your display name. Change your own in **Settings → Profile**. Admins can change anyone's username or reset their password in **Settings → Users**. If no admin can sign in, use the recovery command inside the container. On Unraid: Docker tab → Raccboard icon → **Console**, or from any shell:

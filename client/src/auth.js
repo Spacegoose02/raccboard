@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { getSettings, updateSettings } from './settings.js';
 
 // Shared sign-in state: { loading, setupRequired, user, signup, oidc, users }
-let state = { loading: true, setupRequired: false, user: null, signup: false, oidc: { enabled: false }, users: [], error: '' };
+let state = { loading: true, setupRequired: false, user: null, signup: false, forgot: false, oidc: { enabled: false }, users: [], error: '' };
 const listeners = new Set();
 const set = (patch) => { state = { ...state, ...patch }; listeners.forEach((l) => l()); };
 
@@ -14,7 +14,7 @@ export function useAuth() {
 export async function refreshAuth() {
   try {
     const s = await api.get('/auth/status');
-    set({ loading: false, error: '', setupRequired: s.setupRequired, user: s.user, signup: s.signup, oidc: s.oidc });
+    set({ loading: false, error: '', setupRequired: s.setupRequired, user: s.user, signup: s.signup, forgot: !!s.forgot, oidc: s.oidc });
     if (s.user) loadUsers();
     else if (getSettings().authToken) updateSettings({ authToken: '' });
   } catch (e) {
@@ -36,6 +36,8 @@ function accept({ user, token }) {
 export const signIn = async (username, password) => accept(await api.post('/auth/login', { username, password }));
 export const signUp = async (body) => accept(await api.post('/auth/signup', body));
 export const setupAdmin = async (body) => accept(await api.post('/auth/setup', body));
+export const requestReset = (username) => api.post('/auth/forgot', { username });
+export const resetPassword = async (token, password) => accept(await api.post('/auth/reset', { token, password }));
 
 export async function signOut() {
   try { await api.post('/auth/logout'); } catch { /* already gone */ }

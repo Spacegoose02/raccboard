@@ -29,6 +29,18 @@ function smtpSettings() {
   };
 }
 const configured = (s = smtpSettings()) => !!(s.host && s.from);
+export const emailConfigured = () => configured();
+
+export async function sendResetEmail(user, link, minutes) {
+  const s = smtpSettings();
+  await transport(s).sendMail({
+    from: s.from,
+    to: user.email,
+    subject: 'Reset your Raccboard password',
+    text: `Hi ${user.display_name},\n\nSomeone asked to reset the password for the Raccboard account "${user.username}".\n`
+      + `Open this link within ${minutes} minutes to choose a new password:\n\n${link}\n\nIf it wasn't you, ignore this email; your password stays the same.`,
+  });
+}
 
 function transport(s = smtpSettings()) {
   return nodemailer.createTransport({
