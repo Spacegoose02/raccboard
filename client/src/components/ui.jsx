@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { apiUrl } from '../api.js';
 
 // Closes when clicking outside or pressing Escape.
 export function useDismiss(open, onClose) {
@@ -140,4 +141,12 @@ export function ColorPicker({ colors, value, onChange }) {
       ))}
     </div>
   );
+}
+
+// A card's cover: 'color:<css color>' or 'image:<attachment id>'.
+export function CardCover({ cover, big }) {
+  if (!cover) return null;
+  if (cover.startsWith('color:')) return <div className={`card-cover color ${big ? 'big' : ''}`} style={{ background: cover.slice(6) }} />;
+  if (cover.startsWith('image:')) return <div className={`card-cover image ${big ? 'big' : ''}`}><img src={apiUrl(`/attachments/${cover.slice(6)}?inline=1`)} alt="" loading="lazy" /></div>;
+  return null;
 }

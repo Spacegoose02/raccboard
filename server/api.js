@@ -10,6 +10,7 @@ import { datedEvents, toEvent, buildIcs } from './dates.js';
 import { calendarRouter, feedRouter, scheduleGoogleSync } from './calendar.js';
 import { emailRouter } from './email.js';
 import { sameOriginWrites } from './security.js';
+import { featuresRouter, runAutomations, createBoardFrom } from './features.js';
 
 export const api = express.Router();
 // The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
@@ -22,7 +23,10 @@ api.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
-api.use(express.json({ limit: '2mb' }));
+// Trello exports can be large; everything else stays small.
+const bigJson = express.json({ limit: '50mb' });
+const smallJson = express.json({ limit: '2mb' });
+api.use((req, res, next) => (req.path === '/import/trello' ? bigJson : smallJson)(req, res, next));
 api.use(sameOriginWrites);
 
 api.get('/health', (_req, res) => res.json({ ok: true }));
@@ -41,6 +45,7 @@ api.use((req, res, next) => {
 api.use(sharingRouter);
 api.use(calendarRouter);
 api.use(emailRouter);
+api.use(featuresRouter);
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -108,6 +113,15 @@ api.get('/boards', (req, res) => {
 });
 
 api.post('/boards', (req, res) => {
+  // From a built-in template, or a copy of a board you can open.
+  if (req.body.template || req.body.from_board) {
+    if (req.body.from_board) assertBoard(String(req.body.from_board), 'viewer');
+    const id = createBoardFrom({
+      user: req.user, who: req.who, name: str(req.body.name, 120), color: colorOr(req.body.color, null),
+      templateId: req.body.template ? String(req.body.template) : null, fromBoardId: req.body.from_board ? String(req.body.from_board) : null,
+    });
+    return res.status(201).json({ ...getBoard(id), my_role: 'owner' });
+  }
   const name = str(req.body.name, 120) || 'Untitled board';
   const id = uuid();
   db.transaction(() => {
@@ -260,6 +274,7 @@ api.post('/lists/:id/cards', (req, res) => {
       .run(id, list.id, title, nextPos('cards', 'list_id', list.id), t, t);
     logActivity(list.board_id, id, req.who, `added this card to ${list.name}`);
   })();
+  runAutomations('card_added', { cardId: id, listId: list.id, who: req.who });
   res.status(201).json(getCard(id));
 });
 
@@ -284,11 +299,13 @@ api.patch('/cards/:id', (req, res) => {
     patch('cards', card.id, b, {
       title: (v) => str(v, 300) || card.title,
       description: (v) => (typeof v === 'string' ? v.slice(0, 100000) : ''),
-      start_date: dateOrNull, due_date: dateOrNull, completed: bool, archived: bool,
+      start_date: dateOrNull, due_date: dateOrNull, completed: bool, archived: bool, is_template: bool,
+      cover: (v) => cleanCover(v, card.id),
     });
     touchCard(card.id);
     const log = (t) => logActivity(card.board_id, card.id, req.who, t);
     if ('completed' in b && bool(b.completed) !== card.completed) log(b.completed ? 'marked this card complete' : 'marked this card incomplete');
+    if ('is_template' in b && bool(b.is_template) !== card.is_template) log(b.is_template ? 'made this card a template' : 'turned this template back into a card');
     if ('archived' in b && bool(b.archived) !== card.archived) log(b.archived ? 'archived this card' : 'restored this card');
     // Restoring a card whose list is archived would leave it invisible, so bring the list back too.
     if ('archived' in b && !b.archived) {
@@ -303,8 +320,18 @@ api.patch('/cards/:id', (req, res) => {
     if ('due_date' in b && dateOrNull(b.due_date) !== card.due_date) log(b.due_date ? `set the due date to ${b.due_date}` : 'removed the due date');
     if ('start_date' in b && dateOrNull(b.start_date) !== card.start_date) log(b.start_date ? `set the start date to ${b.start_date}` : 'removed the start date');
   })();
+  if ('completed' in b && b.completed && !card.completed) runAutomations('card_completed', { cardId: card.id, who: req.who });
   res.json(getCard(card.id));
 });
+
+// Covers are 'color:<css color>' or 'image:<attachment id on this card>'.
+function cleanCover(v, cardId) {
+  const s = str(v, 80);
+  if (!s) return null;
+  if (s.startsWith('color:')) return colorOr(s.slice(6), null) ? s : null;
+  if (s.startsWith('image:') && db.prepare("SELECT 1 FROM attachments WHERE id = ? AND card_id = ? AND mime LIKE 'image/%'").get(s.slice(6), cardId)) return s;
+  throw new HttpError(400, 'Covers are a color or an image attached to this card');
+}
 
 // Move a card to (list_id, index). All positions in the target list are rewritten in one transaction.
 api.post('/cards/:id/move', (req, res) => {
@@ -324,6 +351,7 @@ api.post('/cards/:id/move', (req, res) => {
       logActivity(card.board_id, card.id, req.who, `moved this card from ${from.name} to ${target.name}`);
     }
   })();
+  if (target.id !== card.list_id) runAutomations('card_moved', { cardId: card.id, listId: target.id, who: req.who });
   res.json(getCard(card.id));
 });
 
@@ -433,6 +461,9 @@ api.patch('/items/:id', (req, res) => {
   patch('checklist_items', item.id, req.body, { text: (v) => str(v, 500) || item.text, done: bool, due_date: dateOrNull });
   if ('done' in req.body && bool(req.body.done) !== item.done) {
     logActivity(item.board_id, item.card_id, req.who, `${req.body.done ? 'completed' : 'unchecked'} "${item.text}"`);
+    const open = db.prepare(`SELECT COUNT(*) AS n FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id
+      WHERE cl.card_id = ? AND i.done = 0`).get(item.card_id).n;
+    if (req.body.done && open === 0) runAutomations('checklist_completed', { cardId: item.card_id, who: req.who });
   }
   res.json(db.prepare('SELECT * FROM checklist_items WHERE id = ?').get(item.id));
 });
@@ -486,6 +517,7 @@ api.get('/attachments/:id', (req, res) => {
 api.delete('/attachments/:id', (req, res) => {
   const a = getAttachment(req.params.id);
   db.prepare('DELETE FROM attachments WHERE id = ?').run(a.id);
+  db.prepare('UPDATE cards SET cover = NULL WHERE id = ? AND cover = ?').run(a.card_id, `image:${a.id}`);
   removeUpload(a.stored_name);
   logActivity(a.board_id, a.card_id, req.who, `removed attachment ${a.filename}`);
   res.status(204).end();

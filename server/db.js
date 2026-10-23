@@ -205,6 +205,22 @@ const migrations = [
   );
   CREATE INDEX idx_sessions_expires ON sessions(expires_at);
   `,
+  // v8: card covers, card templates and automation rules
+  `
+  ALTER TABLE cards ADD COLUMN cover TEXT;
+  ALTER TABLE cards ADD COLUMN is_template INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE automations (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    trigger TEXT NOT NULL,
+    trigger_list_id TEXT REFERENCES lists(id) ON DELETE CASCADE,
+    action TEXT NOT NULL,
+    action_value TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_automations_board ON automations(board_id);
+  `,
 ];
 
 function migrate() {
