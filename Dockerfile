@@ -25,6 +25,10 @@ ENV NODE_ENV=production \
     DATA_DIR=/data \
     PUID=99 \
     PGID=100
+# Pick up Debian security fixes, and drop npm/npx: the app never needs them at runtime and
+# they are the largest source of scanner findings in the Node image.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/client/dist ./client/dist

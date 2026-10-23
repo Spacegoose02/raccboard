@@ -6,6 +6,8 @@ import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'no
 import { promisify } from 'node:util';
 import * as oidc from 'openid-client';
 import { db, uuid, now, UPLOAD_DIR } from './db.js';
+import { rateLimiter } from './security.js';
+import { sendResetEmail, emailConfigured } from './email.js';
 
 const scrypt = promisify(scryptCb);
 const COOKIE = 'rb_session';
@@ -27,8 +29,11 @@ export async function hashPassword(pw) {
   return `scrypt$${salt.toString('base64')}$${hash.toString('base64')}`;
 }
 
+// Used when the account doesn't exist, so a wrong username takes as long as a wrong password.
+const DUMMY_HASH = `scrypt$${randomBytes(16).toString('base64')}$${randomBytes(64).toString('base64')}`;
+
 async function verifyPassword(pw, stored) {
-  const [kind, salt, hash] = String(stored || '').split('$');
+  const [kind, salt, hash] = String(stored || DUMMY_HASH).split('$');
   if (kind !== 'scrypt' || !salt || !hash) return false;
   const expected = Buffer.from(hash, 'base64');
   const actual = await scrypt(pw, Buffer.from(salt, 'base64'), expected.length);
@@ -61,10 +66,12 @@ function readToken(req) {
   return null;
 }
 
-export function publicUser(u) {
+// Pass `viewer` to hide other people's email addresses from non-admins.
+export function publicUser(u, viewer) {
   if (!u) return null;
+  const showEmail = !viewer || viewer.id === u.id || viewer.role === 'admin';
   return {
-    id: u.id, username: u.username, display_name: u.display_name, email: u.email || '',
+    id: u.id, username: u.username, display_name: u.display_name, email: showEmail ? u.email || '' : '',
     avatar: u.avatar || '', role: u.role, has_password: !!u.password_hash, oidc: !!u.oidc_sub,
   };
 }
@@ -130,11 +137,15 @@ const cleanAvatar = (v) => {
   fail(400, 'Unknown avatar');
 };
 
-async function createUser({ username, display_name, password, role = 'user', email = null, oidc_issuer = null, oidc_sub = null, avatar = null }) {
+async function createUser({ username, display_name, password, role = 'user', email = null, oidc_issuer = null, oidc_sub = null, avatar = null, onlyIfFirst = false }) {
   const id = uuid();
+  const hash = password ? await hashPassword(password) : null;
+  // Re-check after the (slow, async) hash so two simultaneous first-run setups can't both become admin.
+  if (onlyIfFirst && userCount() > 0) fail(409, 'Setup is already done');
+  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) fail(409, 'That username is taken');
   db.prepare(`INSERT INTO users (id, username, display_name, email, password_hash, avatar, role, oidc_issuer, oidc_sub, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, username, display_name, email, password ? await hashPassword(password) : null, avatar, role, oidc_issuer, oidc_sub, now());
+    .run(id, username, display_name, email, hash, avatar, role, oidc_issuer, oidc_sub, now());
   return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 }
 
@@ -147,17 +158,26 @@ function signIn(req, res, user) {
   return { user: publicUser(user), token };
 }
 
-// Simple in-memory brake on password guessing: 10 failures per 15 minutes per IP+username.
-const failures = new Map();
-function throttle(key) {
-  const f = failures.get(key);
-  if (f && Date.now() - f.first < 15 * 60e3 && f.count >= 10) fail(429, 'Too many attempts. Try again in a few minutes.');
+// In-memory brakes on password guessing: 10 failures per 15 minutes per IP+username,
+// and 50 per IP across all usernames (stops spraying one password at many accounts).
+const failures = rateLimiter({ windowMs: 15 * 60e3, max: 10 });
+const ipFailures = rateLimiter({ windowMs: 15 * 60e3, max: 50 });
+const tooMany = () => fail(429, 'Too many attempts. Try again in a few minutes.');
+function throttle(req, key) {
+  if (failures.blocked(key) || ipFailures.blocked(req.ip)) tooMany();
 }
-function recordFailure(key) {
-  const f = failures.get(key);
-  if (!f || Date.now() - f.first > 15 * 60e3) failures.set(key, { first: Date.now(), count: 1 });
-  else f.count += 1;
+function recordFailure(req, key) {
+  failures.hit(key);
+  ipFailures.hit(req.ip);
 }
+
+// Expired sessions and reset links are cleared hourly.
+function purgeExpired() {
+  db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now());
+  db.prepare('DELETE FROM password_resets WHERE expires_at < ?').run(now());
+}
+purgeExpired();
+setInterval(purgeExpired, 60 * 60e3).unref();
 
 /* ---------- OIDC ---------- */
 
@@ -202,6 +222,7 @@ authRouter.get('/auth/status', (req, res) => {
     setupRequired: userCount() === 0,
     user: publicUser(req.user),
     signup: ALLOW_SIGNUP,
+    forgot: emailConfigured(),
     oidc: { enabled: OIDC_ENABLED, name: OIDC_NAME },
   });
 });
@@ -213,6 +234,7 @@ authRouter.post('/auth/setup', async (req, res) => {
   checkUsername(username);
   checkPassword(req.body.password);
   const user = await createUser({
+    onlyIfFirst: true,
     username, password: req.body.password, role: 'admin',
     display_name: cleanName(req.body.display_name, username), email: cleanEmail(req.body.email),
   });
@@ -232,11 +254,12 @@ authRouter.post('/auth/signup', async (req, res) => {
 authRouter.post('/auth/login', async (req, res) => {
   const username = cleanUsername(req.body.username);
   const key = `${req.ip}|${username}`;
-  throttle(key);
+  throttle(req, key);
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  const ok = user?.password_hash && typeof req.body.password === 'string' && await verifyPassword(req.body.password, user.password_hash);
-  if (!ok) { recordFailure(key); fail(401, 'Wrong username or password'); }
-  failures.delete(key);
+  const password = typeof req.body.password === 'string' ? req.body.password.slice(0, 200) : '';
+  const ok = await verifyPassword(password, user?.password_hash) && !!user?.password_hash;
+  if (!ok) { recordFailure(req, key); fail(401, 'Wrong username or password'); }
+  failures.clear(key);
   res.json(signIn(req, res, user));
 });
 
@@ -299,8 +322,8 @@ authRouter.get('/users/:id/photo', requireUser, (req, res) => {
 });
 
 // Everyone signed in can see who else is here (for comments, members and sharing).
-authRouter.get('/users', requireUser, (_req, res) => {
-  res.json(db.prepare('SELECT * FROM users ORDER BY display_name COLLATE NOCASE').all().map(publicUser));
+authRouter.get('/users', requireUser, (req, res) => {
+  res.json(db.prepare('SELECT * FROM users ORDER BY display_name COLLATE NOCASE').all().map((u) => publicUser(u, req.user)));
 });
 
 authRouter.post('/users', requireAdmin, async (req, res) => {
@@ -330,7 +353,7 @@ authRouter.patch('/users/:id', requireAdmin, async (req, res) => {
     checkPassword(req.body.password);
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(req.body.password), u.id);
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
-    for (const key of failures.keys()) if (key.endsWith(`|${u.username.toLowerCase()}`)) failures.delete(key);
+    failures.clearMatching((key) => key.endsWith(`|${u.username.toLowerCase()}`));
   }
   res.json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)));
 });
@@ -344,6 +367,49 @@ authRouter.delete('/users/:id', requireAdmin, (req, res) => {
   res.status(204).end();
 });
 
+/* ----- Forgot password (needs email set up) ----- */
+
+const RESET_MINUTES = 30;
+const resetRequests = rateLimiter({ windowMs: 60 * 60e3, max: 5 });
+
+// Always answers the same way, so it can't be used to find out which accounts or emails exist.
+authRouter.post('/auth/forgot', async (req, res) => {
+  if (!emailConfigured()) fail(400, 'Email is not set up on this server. Ask an admin to reset your password.');
+  const who = String(req.body.username || '').trim().toLowerCase().slice(0, 200);
+  if (!who) fail(400, 'Enter your username or email');
+  if (resetRequests.blocked(req.ip) || resetRequests.blocked(who)) tooMany();
+  resetRequests.hit(req.ip);
+  resetRequests.hit(who);
+  const user = db.prepare('SELECT * FROM users WHERE username = ? OR email = ? COLLATE NOCASE').get(who, who);
+  if (user?.email) {
+    const token = randomBytes(32).toString('base64url');
+    db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
+    db.prepare('INSERT INTO password_resets (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
+      .run(sha256(token), user.id, now(), new Date(Date.now() + RESET_MINUTES * 60e3).toISOString());
+    const base = (env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+    // Don't wait on the mail server, and don't reveal failures to the requester.
+    sendResetEmail(user, `${base}/#/reset/${token}`, RESET_MINUTES).catch((e) => console.error('Password reset email failed:', e.message));
+  }
+  res.json({ ok: true });
+});
+
+authRouter.post('/auth/reset', async (req, res) => {
+  const token = String(req.body.token || '');
+  if (resetRequests.blocked(req.ip)) tooMany();
+  const row = token && db.prepare('SELECT * FROM password_resets WHERE id = ?').get(sha256(token));
+  if (!row || row.expires_at < now()) { resetRequests.hit(req.ip); fail(400, 'This reset link has expired or was already used. Ask for a new one.'); }
+  checkPassword(req.body.password);
+  const hash = await hashPassword(req.body.password);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(row.user_id) || fail(400, 'This reset link is no longer valid');
+  db.transaction(() => {
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
+    db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+  })();
+  failures.clearMatching((key) => key.endsWith(`|${user.username.toLowerCase()}`));
+  res.json(signIn(req, res, user));
+});
+
 /* ----- OIDC (authorization code + PKCE) ----- */
 
 authRouter.get('/auth/oidc/start', async (req, res) => {
@@ -352,8 +418,9 @@ authRouter.get('/auth/oidc/start', async (req, res) => {
   const verifier = oidc.randomPKCECodeVerifier();
   const state = oidc.randomState();
   const ret = String(req.query.return || '/');
-  pending.set(state, { verifier, returnTo: ret.startsWith('/') && !ret.startsWith('//') ? ret : '/', expires: Date.now() + 10 * 60e3 });
   for (const [k, v] of pending) if (v.expires < Date.now()) pending.delete(k);
+  if (pending.size > 1000) fail(429, 'Too many sign-ins in progress. Try again in a few minutes.');
+  pending.set(state, { verifier, returnTo: ret.startsWith('/') && !ret.startsWith('//') && !ret.includes('\\') ? ret : '/', expires: Date.now() + 10 * 60e3 });
   const url = oidc.buildAuthorizationUrl(config, {
     redirect_uri: redirectUri(req),
     scope: env('OIDC_SCOPES', 'openid profile email'),

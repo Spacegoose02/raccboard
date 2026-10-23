@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { api } from './api.js';
 import { DATA_DIR } from './db.js';
+import { securityHeaders } from './security.js';
 
 const APP_NAME = process.env.APP_NAME || 'Raccboard';
 const PORT = Number(process.env.PORT || 3000);
@@ -14,6 +15,7 @@ const app = express();
 app.disable('x-powered-by');
 // Behind a reverse proxy (Nginx Proxy Manager, Caddy, Traefik…) set TRUST_PROXY=true so HTTPS is detected.
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
+app.use(securityHeaders);
 app.use('/api', api);
 
 if (fs.existsSync(dist)) {

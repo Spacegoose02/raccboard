@@ -9,10 +9,11 @@ export const sharingRouter = express.Router();
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 const cleanName = (v) => String(v || '').trim().slice(0, 80);
 
-function teamWithMembers(team) {
+function teamWithMembers(team, viewer) {
   const members = db.prepare(`SELECT u.*, tm.role AS team_role FROM team_members tm JOIN users u ON u.id = tm.user_id
     WHERE tm.team_id = ? ORDER BY tm.role DESC, u.display_name COLLATE NOCASE`).all(team.id)
-    .map((u) => ({ ...publicUser(u), team_role: u.team_role }));
+    
+    .map((u) => ({ ...publicUser(u, viewer), team_role: u.team_role }));
   return { ...team, members };
 }
 
@@ -33,7 +34,7 @@ sharingRouter.get('/teams', (req, res) => {
     ? db.prepare('SELECT * FROM teams ORDER BY name COLLATE NOCASE').all()
     : db.prepare(`SELECT t.* FROM teams t JOIN team_members tm ON tm.team_id = t.id WHERE tm.user_id = ?
                   ORDER BY t.name COLLATE NOCASE`).all(req.user.id);
-  res.json(teams.map(teamWithMembers));
+  res.json(teams.map((t) => teamWithMembers(t, req.user)));
 });
 
 sharingRouter.post('/teams', (req, res) => {
@@ -43,14 +44,14 @@ sharingRouter.post('/teams', (req, res) => {
     db.prepare('INSERT INTO teams (id, name, created_by, created_at) VALUES (?, ?, ?, ?)').run(id, name, req.user.id, now());
     db.prepare("INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'owner')").run(id, req.user.id);
   })();
-  res.status(201).json(teamWithMembers(db.prepare('SELECT * FROM teams WHERE id = ?').get(id)));
+  res.status(201).json(teamWithMembers(db.prepare('SELECT * FROM teams WHERE id = ?').get(id), req.user));
 });
 
 sharingRouter.patch('/teams/:id', (req, res) => {
   const team = getTeam(req, req.params.id, true);
   const name = cleanName(req.body.name);
   if (name) db.prepare('UPDATE teams SET name = ? WHERE id = ?').run(name, team.id);
-  res.json(teamWithMembers(db.prepare('SELECT * FROM teams WHERE id = ?').get(team.id)));
+  res.json(teamWithMembers(db.prepare('SELECT * FROM teams WHERE id = ?').get(team.id), req.user));
 });
 
 sharingRouter.delete('/teams/:id', (req, res) => {
@@ -65,7 +66,7 @@ sharingRouter.put('/teams/:id/members/:userId', (req, res) => {
   const role = req.body?.role === 'owner' ? 'owner' : 'member';
   db.prepare(`INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)
               ON CONFLICT (team_id, user_id) DO UPDATE SET role = excluded.role`).run(team.id, user.id, role);
-  res.json(teamWithMembers(team));
+  res.json(teamWithMembers(team, req.user));
 });
 
 // Owners remove anyone; members can leave.
@@ -90,7 +91,7 @@ function shares(boardId) {
 sharingRouter.get('/boards/:id/shares', (req, res) => {
   const role = assertBoard(req.params.id, 'viewer');
   const board = db.prepare('SELECT owner_id FROM boards WHERE id = ?').get(req.params.id);
-  const owner = board.owner_id ? publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(board.owner_id)) : null;
+  const owner = board.owner_id ? publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(board.owner_id), req.user) : null;
   res.json({ owner, shares: shares(req.params.id), my_role: role });
 });
 
@@ -108,7 +109,7 @@ sharingRouter.put('/boards/:id/shares', (req, res) => {
       .run(uuid(), board.id, user.id, role, now());
     label = user.display_name;
   } else if (req.body.team_id) {
-    const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.body.team_id) || fail(404, 'Team not found');
+    const team = getTeam(req, req.body.team_id);
     db.prepare(`INSERT INTO board_shares (id, board_id, team_id, role, created_at) VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT (board_id, team_id) WHERE team_id IS NOT NULL DO UPDATE SET role = excluded.role`)
       .run(uuid(), board.id, team.id, role, now());

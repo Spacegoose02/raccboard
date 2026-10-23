@@ -9,6 +9,7 @@ import { sharingRouter } from './sharing.js';
 import { datedEvents, toEvent, buildIcs } from './dates.js';
 import { calendarRouter, feedRouter, scheduleGoogleSync } from './calendar.js';
 import { emailRouter } from './email.js';
+import { sameOriginWrites } from './security.js';
 
 export const api = express.Router();
 // The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
@@ -22,6 +23,7 @@ api.use((req, res, next) => {
   next();
 });
 api.use(express.json({ limit: '2mb' }));
+api.use(sameOriginWrites);
 
 api.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -46,7 +48,18 @@ class HttpError extends Error {
 const notFound = (what) => { throw new HttpError(404, `${what} not found`); };
 const bool = (v) => (v ? 1 : 0);
 const str = (v, max = 500) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
-const dateOrNull = (v) => (v ? String(v).slice(0, 32) : null);
+// Dates are YYYY-MM-DD, optionally with a time (YYYY-MM-DDTHH:MM[:SS]).
+const dateOrNull = (v) => {
+  if (!v) return null;
+  const d = String(v).trim();
+  if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/.test(d)) throw new HttpError(400, `"${d.slice(0, 40)}" is not a valid date`);
+  return d;
+};
+// Colors end up in style attributes (and emails), so only allow plain CSS colors.
+const colorOr = (v, fallback) => {
+  const c = str(v, 32);
+  return /^(#[0-9a-f]{3,8}|[a-z]{3,20}|(rgb|hsl)a?\([\d\s.,%]+\))$/i.test(c) ? c : fallback;
+};
 
 // Build an UPDATE from whitelisted fields present in the body.
 function patch(table, id, body, fields) {
@@ -99,7 +112,7 @@ api.post('/boards', (req, res) => {
   const id = uuid();
   db.transaction(() => {
     db.prepare('INSERT INTO boards (id, name, color, position, created_at, owner_id) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, name, str(req.body.color, 32) || null, nextPosAll('boards'), now(), req.user.id);
+      .run(id, name, colorOr(req.body.color, null), nextPosAll('boards'), now(), req.user.id);
     const ins = db.prepare('INSERT INTO labels (id, board_id, name, color) VALUES (?, ?, ?, ?)');
     for (const l of DEFAULT_LABELS) ins.run(uuid(), id, l.name, l.color);
     logActivity(id, null, req.who, `created board "${name}"`);
@@ -132,7 +145,7 @@ api.get('/boards/:id', (req, res) => {
     ORDER BY c.position`).all(board.id)
     .map((c) => ({ ...c, label_ids: JSON.parse(c.label_ids), member_ids: JSON.parse(c.member_ids) }));
   const labels = db.prepare('SELECT * FROM labels WHERE board_id = ? ORDER BY rowid').all(board.id);
-  const people = boardUsers(board.id).map(publicUser);
+  const people = boardUsers(board.id).map((u) => publicUser(u, req.user));
   res.json({ board: { ...board, my_role: boardRole(board.id, req.user) }, lists, cards, labels, people });
 });
 
@@ -167,7 +180,7 @@ api.patch('/boards/:id', (req, res) => {
   const board = getBoard(req.params.id, 'owner');
   const b = req.body;
   db.transaction(() => {
-    patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => str(v, 32) || null, archived: bool });
+    patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => colorOr(v, null), archived: bool });
     if ('completed' in b) {
       db.prepare('UPDATE boards SET completed_at = ? WHERE id = ?').run(b.completed ? now() : null, board.id);
       logActivity(board.id, null, req.who, b.completed ? 'completed the board' : 'reopened the board');
@@ -320,13 +333,13 @@ api.post('/boards/:id/labels', (req, res) => {
   const board = getBoard(req.params.id);
   const id = uuid();
   db.prepare('INSERT INTO labels (id, board_id, name, color) VALUES (?, ?, ?, ?)')
-    .run(id, board.id, str(req.body.name, 60), str(req.body.color, 32) || '#64748b');
+    .run(id, board.id, str(req.body.name, 60), colorOr(req.body.color, '#64748b'));
   res.status(201).json(db.prepare('SELECT * FROM labels WHERE id = ?').get(id));
 });
 
 api.patch('/labels/:id', (req, res) => {
   const label = getLabel(req.params.id);
-  patch('labels', label.id, req.body, { name: (v) => str(v, 60), color: (v) => str(v, 32) || label.color });
+  patch('labels', label.id, req.body, { name: (v) => str(v, 60), color: (v) => colorOr(v, label.color) });
   res.json(db.prepare('SELECT * FROM labels WHERE id = ?').get(label.id));
 });
 
@@ -451,8 +464,13 @@ api.post('/cards/:id/attachments', upload.single('file'), (req, res) => {
 
 api.get('/attachments/:id', (req, res) => {
   const a = getAttachment(req.params.id);
-  if (a.mime) res.type(a.mime);
-  const disposition = req.query.inline ? 'inline' : 'attachment';
+  // Only show images, PDFs, video and audio inline. Anything else (HTML, SVG…) could run script on
+  // our origin, so it is always downloaded; the sandbox CSP is a second guard.
+  const safeInline = /^(image\/(png|jpeg|gif|webp|avif|bmp)|application\/pdf|video\/(mp4|webm)|audio\/(mpeg|ogg|wav|webm))$/.test(a.mime || '');
+  res.type(safeInline ? a.mime : 'application/octet-stream');
+  // (Chrome's PDF viewer refuses to run in a sandbox, so PDFs keep the normal policy.)
+  if (a.mime !== 'application/pdf') res.set('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'");
+  const disposition = req.query.inline && safeInline ? 'inline' : 'attachment';
   res.set('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(a.filename)}`);
   res.sendFile(path.join(UPLOAD_DIR, a.stored_name));
 });

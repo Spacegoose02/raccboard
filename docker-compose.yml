@@ -32,4 +32,7 @@ services:
       # Google Calendar sync (needs PUBLIC_URL with https):
       # - GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
       # - GOOGLE_CLIENT_SECRET=change-me
+    # The entrypoint drops from root to PUID:PGID; this stops anything regaining privileges after that.
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped

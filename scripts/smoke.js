@@ -34,7 +34,20 @@ const extraName = `smoke-${Date.now()}`;
 const extra = await call('POST', '/users', { username: extraName, password: 'another-password', display_name: 'Extra' });
 check((await call('GET', '/users')).some((u) => u.id === extra.id), 'admin creates a user');
 
+// Security basics
+const page = await fetch(base.replace(/\/api$/, '/api/health'));
+check(page.headers.get('x-content-type-options') === 'nosniff' && /frame-ancestors 'none'/.test(page.headers.get('content-security-policy') || ''), 'security headers are sent');
+const extraSession = await call('POST', '/auth/login', { username: extraName, password: 'another-password' });
+const others = await call('GET', '/users', null, extraSession.token);
+check(others.every((u) => u.id === extra.id || u.email === ''), "non-admins don't see other people's emails");
+const forged = await fetch(base + '/boards', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: `rb_session=${extraSession.token}`, Origin: 'https://evil.example' }, body: '{}' });
+check(forged.status === 403, 'cross-site cookie writes are blocked');
+
 const board = await call('POST', '/boards', { name: 'Smoke board' });
+const badDate = await fetch(base + `/boards/${board.id}/lists`, { method: 'POST', headers, body: JSON.stringify({ name: 'x', due_date: 'tomorrow<script>' }) });
+check(badDate.status === 400, 'invalid dates are rejected');
+const evilLabel = await call('POST', `/boards/${board.id}/labels`, { name: 'x', color: 'red;background:url(//evil)' });
+check(evilLabel.color === '#64748b', 'unsafe label colors fall back to the default');
 check(board.id, 'create board');
 const todo = await call('POST', `/boards/${board.id}/lists`, { name: 'To do' });
 const doing = await call('POST', `/boards/${board.id}/lists`, { name: 'Doing' });
@@ -75,6 +88,11 @@ const up = await fetch(`${base}/cards/${card.id}/attachments`, { method: 'POST',
 const att = await up.json();
 const dl = await fetch(`${base}/attachments/${att.id}?access_token=${session.token}`).then((r) => r.text());
 check(dl === 'hello raccoon', 'attachment upload and download');
+const htmlForm = new FormData();
+htmlForm.append('file', new Blob(['<script>alert(1)</script>'], { type: 'text/html' }), 'x.html');
+const htmlAtt = await (await fetch(`${base}/cards/${card.id}/attachments`, { method: 'POST', body: htmlForm, headers: { Authorization: headers.Authorization } })).json();
+const htmlDl = await fetch(`${base}/attachments/${htmlAtt.id}?inline=1`, { headers: { Authorization: headers.Authorization } });
+check(/^attachment/.test(htmlDl.headers.get('content-disposition')) && htmlDl.headers.get('content-type').startsWith('application/octet-stream'), 'HTML attachments are never shown inline');
 
 const cl2 = await call('POST', `/cards/${card2.id}/checklists`, { title: 'Shopping', due_date: '2026-12-24' });
 check(cl2.due_date === '2026-12-24', 'checklist (sublist) created with due date');

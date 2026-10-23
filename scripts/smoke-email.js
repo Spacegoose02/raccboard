@@ -97,6 +97,22 @@ try {
   check(decoded.includes(`${APP}/#/b/${board.id}/c/${card.id}`), 'link back to the card');
   const detail = await json('GET', `/cards/${card.id}`);
   check(detail.activity.some((a) => a.text.startsWith('emailed this card to')), 'activity log records the email');
+
+  // Forgot password: same answer for unknown accounts, one-time link, signs out old sessions.
+  const post = (p, body) => fetch(`${APP}/api${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  check((await (await fetch(`${APP}/api/auth/status`)).json()).forgot, 'forgot-password is offered once email works');
+  const before = messages.length;
+  check((await post('/auth/forgot', { username: 'nobody-here' })).ok && messages.length === before, 'unknown account gets the same answer and no email');
+  await post('/auth/forgot', { username: 'MAE@example.com' });
+  for (let i = 0; i < 40 && messages.length === before; i++) await new Promise((r) => setTimeout(r, 100));
+  const resetMail = messages.at(-1).data.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  const token = resetMail.match(/#\/reset\/([\w-]+)/)?.[1];
+  check(messages.at(-1).to[0] === 'mae@example.com' && token, 'reset link emailed to the account address');
+  const reset = await post('/auth/reset', { token, password: 'brand-new-pass' });
+  check(reset.ok && (await reset.json()).token, 'reset link sets a new password and signs in');
+  check((await call('GET', '/boards')).status === 401, 'old sessions are signed out after a reset');
+  check((await post('/auth/reset', { token, password: 'another-pass-1' })).status === 400, 'reset link works only once');
+  check((await post('/auth/login', { username: 'mailer', password: 'brand-new-pass' })).ok, 'new password signs in');
   console.log('Email smoke test passed.');
 } finally {
   server.kill();

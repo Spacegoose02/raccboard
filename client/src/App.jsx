@@ -15,6 +15,7 @@ import { Menu } from './components/ui.jsx';
 function parse(hash) {
   const parts = hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
   if (parts[0] === 'calendar') return { page: 'calendar' };
+  if (parts[0] === 'reset' && parts[1]) return { page: 'reset', token: parts[1] };
   if (parts[0] === 'settings') return { page: 'settings', boardId: parts[1] === 'board' ? parts[2] : null };
   if (parts[0] === 'b' && parts[1]) return { page: 'board', boardId: parts[1], cardId: parts[2] === 'c' ? parts[3] : null };
   return { page: 'home' };
@@ -61,7 +62,8 @@ export default function App() {
         {IS_NATIVE && <button className="btn" onClick={() => window.dispatchEvent(new Event('rb:change-server'))}>Change server</button>}
       </div>
     );
-  } else if (!auth.user) content = <SignIn key={auth.setupRequired ? 'setup' : 'login'} />;
+  } else if (route.page === 'reset') content = <SignIn key="reset" resetToken={route.token} />;
+  else if (!auth.user) content = <SignIn key={auth.setupRequired ? 'setup' : 'login'} />;
   else {
     content = (
       <Suspense fallback={<div className="page"><p className="muted">Loading…</p></div>}>
