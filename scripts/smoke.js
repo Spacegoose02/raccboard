@@ -166,6 +166,24 @@ check(nobody.status === 400, 'cannot add a member who has no access');
 await call('DELETE', `/teams/${team.id}`);
 await call('DELETE', `/boards/${shared.id}`);
 
+// Regression checks for bug fixes
+{
+  const bl = await call('POST', `/boards/${board.id}/lists`, { name: 'Old stuff' });
+  const bc = await call('POST', `/lists/${bl.id}/cards`, { title: 'Forgotten' });
+  await call('PATCH', `/cards/${bc.id}`, { archived: true });
+  await call('PATCH', `/lists/${bl.id}`, { archived: true });
+  await call('PATCH', `/cards/${bc.id}`, { archived: false });
+  check((await call('GET', `/boards/${board.id}`)).lists.some((l) => l.id === bl.id), 'restoring a card also restores its archived list');
+  const sc = await call('POST', `/lists/${bl.id}/cards`, { title: 'Start only' });
+  await call('PATCH', `/cards/${sc.id}`, { start_date: '2026-11-05' });
+  check((await call('GET', `/dates?board=${board.id}`)).some((e) => e.id === sc.id && e.date === '2026-11-05'), 'cards with only a start date show on the calendar');
+  const team = await call('POST', '/teams', { name: 'Smoke team' });
+  const demote = await fetch(`${base}/teams/${team.id}/members/${session.user.id}`, { method: 'PUT', headers, body: JSON.stringify({ role: 'member' }) });
+  check(demote.status === 400, "a team's only owner can't be demoted");
+  await call('DELETE', `/teams/${team.id}`);
+}
+
+
 await call('DELETE', `/boards/${board.id}`);
 await call('DELETE', `/users/${extra.id}`);
 await call('POST', '/auth/logout');

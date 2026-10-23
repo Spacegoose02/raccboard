@@ -63,6 +63,8 @@ sharingRouter.put('/teams/:id/members/:userId', (req, res) => {
   const team = getTeam(req, req.params.id, true);
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.userId) || fail(404, 'User not found');
   const role = req.body?.role === 'owner' ? 'owner' : 'member';
+  const owners = db.prepare("SELECT user_id FROM team_members WHERE team_id = ? AND role = 'owner'").pluck().all(team.id);
+  if (role === 'member' && owners.length === 1 && owners[0] === user.id) fail(400, 'A team needs an owner. Make someone else owner first.');
   db.prepare(`INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)
               ON CONFLICT (team_id, user_id) DO UPDATE SET role = excluded.role`).run(team.id, user.id, role);
   res.json(teamWithMembers(team));

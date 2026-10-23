@@ -75,7 +75,10 @@ export default function Board({ boardId, cardId }) {
       for (const card of d.cards) c[card.list_id]?.push(card.id);
       setCols(c);
       document.title = `${d.board.name} · ${APP_NAME}`;
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      // A failed background refresh (flaky Wi-Fi, server restart) keeps the board on screen.
+      setData((d) => { if (!d) setError(e.message); return d; });
+    }
   }, [boardId]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -167,7 +170,7 @@ export default function Board({ boardId, cardId }) {
       if (!over || over.id === a.id || !isList(over.id)) return;
       const next = arrayMove(listOrder, listOrder.indexOf(drag.id), listOrder.indexOf(raw(over.id)));
       setListOrder(next);
-      await api.put(`/boards/${boardId}/lists/order`, { ids: next });
+      try { await api.put(`/boards/${boardId}/lists/order`, { ids: next }); } catch (e) { alert(`Could not move list: ${e.message}`); load(); }
       return;
     }
     const c = { ...colsRef.current };
@@ -201,7 +204,7 @@ export default function Board({ boardId, cardId }) {
   const patchCardLocal = (id, patch) => setData((d) => ({ ...d, cards: d.cards.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
   const toggleCard = async (card) => {
     patchCardLocal(card.id, { completed: card.completed ? 0 : 1 });
-    await api.patch(`/cards/${card.id}`, { completed: !card.completed });
+    try { await api.patch(`/cards/${card.id}`, { completed: !card.completed }); } catch (e) { patchCardLocal(card.id, { completed: card.completed }); alert(e.message); }
   };
   const updateList = async (id, patch) => { await api.patch(`/lists/${id}`, patch); load(); };
   const archiveCards = async (list) => {
