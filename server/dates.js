@@ -23,13 +23,13 @@ export function datedEvents({ user, boardIds, cardId, from = '0000-01-01', to = 
   const cardsJoin = 'JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id';
   const rows = [
     ...db.prepare(`
-      SELECT 'card' AS type, c.id, c.id AS card_id, c.title, c.description, c.due_date AS date, c.start_date, c.completed AS done,
+      SELECT 'card' AS type, c.id, c.id AS card_id, c.title, c.description, COALESCE(c.due_date, c.start_date) AS date, c.due_date, c.start_date, c.completed AS done,
         l.name AS list_name, b.id AS board_id, b.name AS board_name, b.color AS board_color,
         (SELECT json_group_array(label_id) FROM card_labels WHERE card_id = c.id) AS label_ids,
         (SELECT json_group_array(user_id) FROM card_members WHERE card_id = c.id) AS member_ids
       FROM cards c ${cardsJoin}
-      WHERE c.archived = 0 AND ${live} AND c.due_date IS NOT NULL
-        AND substr(COALESCE(c.start_date, c.due_date), 1, 10) <= ? AND substr(c.due_date, 1, 10) >= ?`)
+      WHERE c.archived = 0 AND ${live} AND COALESCE(c.due_date, c.start_date) IS NOT NULL
+        AND substr(COALESCE(c.start_date, c.due_date), 1, 10) <= ? AND substr(COALESCE(c.due_date, c.start_date), 1, 10) >= ?`)
       .all(...params, to, from),
     ...db.prepare(`
       SELECT 'checklist' AS type, cl.id, c.id AS card_id, cl.title || ' · ' || c.title AS title, cl.due_date AS date,
@@ -85,7 +85,9 @@ export function toEvent(r) {
   const due = r.date;
   const base = { uid: `${r.type}-${r.id}@rackboard`, kind: r.type, ref: r.id, title, description, url };
   if (r.type === 'card' && r.start_date) {
-    return { ...base, allDay: true, start: r.start_date.slice(0, 10), end: nextDay(due.slice(0, 10)) };
+    // A start date after the due date would make an event that ends before it begins.
+    const start = r.start_date.slice(0, 10) <= due.slice(0, 10) ? r.start_date.slice(0, 10) : due.slice(0, 10);
+    return { ...base, allDay: true, start, end: nextDay(due.slice(0, 10)) };
   }
   if (due.length > 10) return { ...base, allDay: false, start: due.slice(0, 16), end: plusMinutes(due.slice(0, 16), 30) };
   return { ...base, allDay: true, start: due, end: nextDay(due) };

@@ -57,7 +57,8 @@ export default function CalendarView({ boardId, keep = () => true, canEdit = tru
     const oldDay = (e.isStart ? e.start_date : e.date).slice(0, 10);
     if (oldDay === day) return;
     const delta = daysBetween(oldDay, day);
-    const body = { due_date: addDays(e.date, delta) + e.date.slice(10) };
+    // Cards with only a start date are shown on that date; moving them must not invent a due date.
+    const body = e.type === 'card' && !e.due_date ? {} : { due_date: addDays(e.date, delta) + e.date.slice(10) };
     if (e.type === 'card' && e.start_date) body.start_date = addDays(e.start_date, delta) + e.start_date.slice(10);
     try {
       await api.patch(`/${PATCH_PATH[e.type]}/${e.id}`, body);

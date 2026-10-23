@@ -76,7 +76,7 @@ export function publicUser(u, viewer) {
   };
 }
 
-function loadUser(req, _res, next) {
+function loadUser(req, res, next) {
   const token = readToken(req);
   if (token) {
     const row = db.prepare(`SELECT s.id AS sid, s.expires_at, u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`).get(sha256(token));
@@ -87,6 +87,8 @@ function loadUser(req, _res, next) {
       // Sliding expiry: extend once a day of use.
       if (new Date(row.expires_at).getTime() - Date.now() < (SESSION_DAYS - 1) * 864e5) {
         db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(new Date(Date.now() + SESSION_DAYS * 864e5).toISOString(), row.sid);
+        // Refresh the browser cookie too, or it still expires 30 days after sign-in however active you are.
+        if (!(req.get('Authorization') || '').startsWith('Bearer ')) setCookie(req, res, token);
       }
     }
   }
