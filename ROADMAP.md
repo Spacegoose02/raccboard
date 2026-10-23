@@ -39,6 +39,13 @@
 - [x] Recovery CLI: list-users, reset-password, rename-user, make-admin
 - [x] Docker images on GHCR (amd64 + arm64), Unraid PUID/PGID and template
 
+## v1.2.0 (released 2026-10-23)
+
+- [x] Security hardening: CSP and security headers, safe attachment downloads, stronger login throttling, cross-site write protection, hidden emails, Docker image updates
+- [x] Forgot password by email (one-time links)
+- [x] Bug fixes: 30-day sign-out, vanishing restored cards, start-date-only cards on calendars, team owners
+- [x] Trello favorites: card covers, search and filters, keyboard shortcuts, copy card, card and board templates (incl. Homeboard), automation rules, Trello import
+
 ## Phase 2: Accounts and sharing
 
 - [ ] @mentions in comments
