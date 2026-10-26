@@ -61,6 +61,28 @@ check(full.cards.find((c) => c.id === c2.id).cover === 'color:#ef4444', 'color c
 const badCover = await fetch(`${base}/cards/${c2.id}`, { method: 'PATCH', headers, body: JSON.stringify({ cover: 'image:not-mine' }) });
 check(badCover.status === 400, 'image covers must be an image on the card');
 
+// Board backgrounds
+const raw = (method, path, body) => fetch(base + path, { method, headers: { Authorization: headers.Authorization }, body });
+const patchBg = (background) => fetch(`${base}/boards/${kb.id}`, { method: 'PATCH', headers, body: JSON.stringify({ background }) });
+check((await call('PATCH', `/boards/${kb.id}`, { background: 'preset:ocean' })).background === 'preset:ocean', 'preset background saved');
+check((await call('PATCH', `/boards/${kb.id}`, { background: 'color:#3b82f6' })).background === 'color:#3b82f6', 'color background saved');
+check((await call('PATCH', `/boards/${kb.id}`, { background: 'url:https://example.com/bg.jpg' })).background === 'url:https://example.com/bg.jpg', 'https link background saved');
+for (const bad of ['url:http://example.com/a.jpg', 'url:javascript:alert(1)', 'url:https://x.com/a.jpg");background:url("https://evil', 'preset:nope', 'image:../../rackboard.db:image/png', 'color:red;x'])
+  check((await patchBg(bad)).status === 400, `background rejected: ${bad.slice(0, 40)}`);
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPj/HwADAgH/eL9GtQAAAABJRU5ErkJggg==', 'base64');
+const form = (bytes, name, type) => { const f = new FormData(); f.append('file', new Blob([bytes], { type }), name); return f; };
+let up = await raw('POST', `/boards/${kb.id}/background`, form(png, 'bg.png', 'image/png'));
+const upped = await up.json();
+check(up.status === 201 && /^image:[0-9a-f-]+:image\/png$/.test(upped.background), 'image background uploaded');
+const got = await raw('GET', `/boards/${kb.id}/background`);
+check(got.headers.get('content-type') === 'image/png' && got.headers.get('content-security-policy').includes('sandbox') && Buffer.from(await got.arrayBuffer()).equals(png), 'uploaded background served as image with sandbox CSP');
+up = await raw('POST', `/boards/${kb.id}/background`, form('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', 'x.png', 'image/png'));
+check(up.status === 415, 'non-images (SVG disguised as PNG) are rejected');
+up = await raw('POST', `/boards/${kb.id}/background`, form(Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]), 'big.png', 'image/png'));
+check(up.status === 413, 'oversized backgrounds are rejected');
+check((await call('PATCH', `/boards/${kb.id}`, { background: null })).background === null, 'background removed');
+check((await raw('GET', `/boards/${kb.id}/background`)).status === 404, 'removed image is no longer served');
+
 // Copy card and templates
 const copy = await call('POST', `/cards/${c2.id}/copy`, { list_id: doing.id, title: 'Copied' });
 detail = await call('GET', `/cards/${copy.id}`);

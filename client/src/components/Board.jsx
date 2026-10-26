@@ -10,7 +10,8 @@ import { api } from '../api.js';
 import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
 import { dueStatus, formatDate, parseDate } from '../dates.js';
-import { CardCover, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
+import { CardCover, CompleteCircle, Composer, InlineEdit, Menu, Popover, backgroundStyle } from './ui.jsx';
+import { BackgroundPicker } from './BackgroundPicker.jsx';
 import { Avatar } from './Avatar.jsx';
 import { ShareDialog } from './Share.jsx';
 const CardModal = lazy(() => import('./CardModal.jsx'));
@@ -64,6 +65,7 @@ export default function Board({ boardId, cardId }) {
   const [filter, setFilter] = useState(NO_FILTER);
   const searchRef = useRef(null);
   const [showKeys, setShowKeys] = useState(false);
+  const [showBg, setShowBg] = useState(false);
   const { user: me } = useAuth();
   const colsRef = useRef(cols);
   colsRef.current = cols;
@@ -262,7 +264,7 @@ export default function Board({ boardId, cardId }) {
   const ctx = { cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate };
 
   return (
-    <div className="board" style={{ '--board-accent': board.color || 'var(--accent)' }}>
+    <div className={`board ${board.background ? 'has-bg' : ''}`} style={{ '--board-accent': board.color || 'var(--accent)', ...backgroundStyle(board) }}>
       <div className="board-bar">
         <InlineEdit value={board.name} onSave={renameBoard} className="board-title" readOnly={!isOwner} />
         <div className="view-switch" role="tablist" aria-label="View">
@@ -279,12 +281,14 @@ export default function Board({ boardId, cardId }) {
           {data.people.length > 6 && <span className="more-people">+{data.people.length - 6}</span>}
         </div>
         <button className="btn subtle" onClick={() => setShowShare(true)}>👪 {isOwner ? 'Share' : 'Members'}</button>
+        {isOwner && <button className="btn subtle wide-only" onClick={() => setShowBg(true)}>🖼 Background</button>}
         {isOwner && <a className="btn subtle wide-only" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowRules(true)} title="Automation rules">⚡ Automation</button>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowArchived(true)}>🗃 Archived items</button>}
         {isOwner && <button className="btn subtle wide-only" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen board' : '✓ Complete board'}</button>}
         {canEdit && (
           <Menu className="narrow-only" items={[
+            isOwner && { label: '🖼 Background', onClick: () => setShowBg(true) },
             isOwner && { label: '⚙ Board settings', onClick: () => navigate(`/settings/board/${boardId}`) },
             { label: '⚡ Automation', onClick: () => setShowRules(true) },
             { label: '🗃 Archived items', onClick: () => setShowArchived(true) },
@@ -319,6 +323,7 @@ export default function Board({ boardId, cardId }) {
         {filtering && <button className="link-btn small" onClick={() => setFilter(NO_FILTER)}>Clear ({data.cards.filter(shows).length} shown)</button>}
         <button className="icon-btn wide-only" title="Keyboard shortcuts (?)" onClick={() => setShowKeys(true)}>⌨</button>
       </div>
+      {showBg && <BackgroundPicker board={board} onClose={() => setShowBg(false)} onChange={() => load()} />}
       {showKeys && (
         <Popover title="Keyboard shortcuts" onClose={() => setShowKeys(false)} className="keys-pop">
           <dl className="shortcuts">

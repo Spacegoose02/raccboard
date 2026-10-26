@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto';
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || './data');
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+export const BACKGROUND_DIR = path.join(UPLOAD_DIR, 'backgrounds');
+fs.mkdirSync(BACKGROUND_DIR, { recursive: true });
 
 export const db = new Database(path.join(DATA_DIR, 'rackboard.db'));
 db.pragma('journal_mode = WAL');
@@ -221,6 +222,8 @@ const migrations = [
   );
   CREATE INDEX idx_automations_board ON automations(board_id);
   `,
+  // v9: board backgrounds
+  'ALTER TABLE boards ADD COLUMN background TEXT;',
 ];
 
 function migrate() {

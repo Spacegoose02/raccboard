@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiUrl } from '../api.js';
+import { BACKGROUNDS } from '../config.js';
 
 // Closes when clicking outside or pressing Escape.
 export function useDismiss(open, onClose) {
@@ -148,5 +149,17 @@ export function CardCover({ cover, big }) {
   if (!cover) return null;
   if (cover.startsWith('color:')) return <div className={`card-cover color ${big ? 'big' : ''}`} style={{ background: cover.slice(6) }} />;
   if (cover.startsWith('image:')) return <div className={`card-cover image ${big ? 'big' : ''}`}><img src={apiUrl(`/attachments/${cover.slice(6)}?inline=1`)} alt="" loading="lazy" /></div>;
+  return null;
+}
+
+// Inline style for a board background: 'preset:<name>', 'color:<css>', 'url:<https>' or 'image:<file>:<mime>'.
+// The server only stores URLs without quotes, parens or spaces, so they are safe inside url("…").
+export function backgroundStyle(board) {
+  const bg = board?.background;
+  if (!bg) return null;
+  if (bg.startsWith('preset:')) return BACKGROUNDS[bg.slice(7)] ? { backgroundImage: BACKGROUNDS[bg.slice(7)] } : null;
+  if (bg.startsWith('color:')) return { backgroundColor: bg.slice(6), backgroundImage: 'none' };
+  if (bg.startsWith('url:') && !/["'()\\\s]/.test(bg)) return { backgroundImage: `url("${bg.slice(4)}")` };
+  if (bg.startsWith('image:')) return { backgroundImage: `url("${apiUrl(`/boards/${board.id}/background?v=${encodeURIComponent(bg.split(':')[1])}`)}")` };
   return null;
 }

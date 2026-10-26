@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
-import { db, uuid, now, logActivity, DEFAULT_LABELS, UPLOAD_DIR } from './db.js';
+import { db, uuid, now, logActivity, DEFAULT_LABELS, UPLOAD_DIR, BACKGROUND_DIR } from './db.js';
 import { authRouter, publicUser, requireUser } from './auth.js';
 import { assertBoard, boardRole, boardUsers, VISIBLE_BOARDS_SQL, visibleParams, withRequest } from './access.js';
 import { sharingRouter } from './sharing.js';
@@ -195,6 +195,7 @@ api.patch('/boards/:id', (req, res) => {
   const b = req.body;
   db.transaction(() => {
     patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => colorOr(v, null), archived: bool });
+    if ('background' in b) setBackground(board, cleanBackground(b.background));
     if ('completed' in b) {
       db.prepare('UPDATE boards SET completed_at = ? WHERE id = ?').run(b.completed ? now() : null, board.id);
       logActivity(board.id, null, req.who, b.completed ? 'completed the board' : 'reopened the board');
@@ -212,7 +213,77 @@ api.delete('/boards/:id', (req, res) => {
     JOIN lists l ON l.id = c.list_id WHERE l.board_id = ?`).all(board.id);
   db.prepare('DELETE FROM boards WHERE id = ?').run(board.id);
   files.forEach((f) => removeUpload(f.stored_name));
+  removeBackground(board.background);
   res.status(204).end();
+});
+
+/* ---------- Board backgrounds ---------- */
+
+// Backgrounds are 'preset:<name>', 'color:<css color>', 'url:<https image URL>' or
+// 'image:<file>:<mime>' (uploaded, set via the upload route only).
+export const BACKGROUND_PRESETS = ['ocean', 'sunset', 'forest', 'grape', 'peach', 'midnight', 'aurora', 'slate'];
+
+function cleanBackground(v) {
+  const s = str(v, 2100);
+  if (!s) return null;
+  if (s.startsWith('preset:') && BACKGROUND_PRESETS.includes(s.slice(7))) return s;
+  if (s.startsWith('color:') && colorOr(s.slice(6), null)) return s;
+  if (s.startsWith('url:')) {
+    // The URL ends up inside CSS url("..."), so refuse anything that could break out of it.
+    const raw = s.slice(4);
+    let u;
+    try { u = new URL(raw); } catch { u = null; }
+    if (u && u.protocol === 'https:' && !u.username && !u.password && u.href.length <= 2048 && !/["'()\\\s<>]/.test(u.href)) return `url:${u.href}`;
+    throw new HttpError(400, 'Background images must be an https:// link');
+  }
+  throw new HttpError(400, 'Backgrounds are a preset, a color, an https image link or an uploaded image');
+}
+
+function removeBackground(bg) {
+  if (bg?.startsWith('image:')) fs.rm(path.join(BACKGROUND_DIR, path.basename(bg.split(':')[1])), { force: true }, () => {});
+}
+
+function setBackground(board, bg) {
+  db.prepare('UPDATE boards SET background = ? WHERE id = ?').run(bg, board.id);
+  if (board.background !== bg) removeBackground(board.background);
+}
+
+// Trust the file's bytes, not the browser's claimed type. Only raster formats browsers show
+// safely in an <img>/CSS background; SVG (which can carry script) is never accepted.
+export function sniffImage(buf) {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG') return 'image/png';
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.toString('latin1', 0, 4) === 'GIF8') return 'image/gif';
+  if (buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
+
+const backgroundUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: Number(process.env.MAX_BACKGROUND_MB || 5) * 1024 * 1024, files: 1 },
+});
+
+api.post('/boards/:id/background', backgroundUpload.single('file'), (req, res) => {
+  const board = getBoard(req.params.id, 'owner');
+  if (!req.file) throw new HttpError(400, 'No file uploaded');
+  const mime = sniffImage(req.file.buffer);
+  if (!mime) throw new HttpError(415, 'Choose a PNG, JPEG, WebP or GIF image');
+  const file = uuid();
+  fs.writeFileSync(path.join(BACKGROUND_DIR, file), req.file.buffer);
+  setBackground(board, `image:${file}:${mime}`);
+  logActivity(board.id, null, req.who, 'changed the board background');
+  res.status(201).json({ ...getBoard(board.id), my_role: boardRole(board.id, req.user) });
+});
+
+api.get('/boards/:id/background', (req, res) => {
+  const board = getBoard(req.params.id, 'viewer');
+  if (!board.background?.startsWith('image:')) throw new HttpError(404, 'No background image');
+  const [, file, mime] = board.background.split(':');
+  res.type(mime);
+  res.set('Content-Security-Policy', "sandbox; default-src 'none'");
+  res.set('Cache-Control', 'private, max-age=86400');
+  res.sendFile(path.join(BACKGROUND_DIR, path.basename(file)));
 });
 
 /* ---------- Lists ---------- */
