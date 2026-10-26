@@ -69,13 +69,24 @@ check((await call('PATCH', `/boards/${kb.id}`, { background: 'color:#3b82f6' }))
 check((await call('PATCH', `/boards/${kb.id}`, { background: 'url:https://example.com/bg.jpg' })).background === 'url:https://example.com/bg.jpg', 'https link background saved');
 for (const bad of ['url:http://example.com/a.jpg', 'url:javascript:alert(1)', 'url:https://x.com/a.jpg");background:url("https://evil', 'preset:nope', 'image:../../rackboard.db:image/png', 'color:red;x'])
   check((await patchBg(bad)).status === 400, `background rejected: ${bad.slice(0, 40)}`);
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPj/HwADAgH/eL9GtQAAAABJRU5ErkJggg==', 'base64');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWOwbvpm3fSNAUIBACy2Bs0ifrYRAAAAAElFTkSuQmCC', 'base64');
 const form = (bytes, name, type) => { const f = new FormData(); f.append('file', new Blob([bytes], { type }), name); return f; };
 let up = await raw('POST', `/boards/${kb.id}/background`, form(png, 'bg.png', 'image/png'));
 const upped = await up.json();
-check(up.status === 201 && /^image:[0-9a-f-]+:image\/png$/.test(upped.background), 'image background uploaded');
+check(up.status === 201 && /^image:[0-9a-f-]+:image\/webp$/.test(upped.background), 'image background uploaded and re-encoded');
 const got = await raw('GET', `/boards/${kb.id}/background`);
-check(got.headers.get('content-type') === 'image/png' && got.headers.get('content-security-policy').includes('sandbox') && Buffer.from(await got.arrayBuffer()).equals(png), 'uploaded background served as image with sandbox CSP');
+const gotBytes = Buffer.from(await got.arrayBuffer());
+check(got.headers.get('content-type') === 'image/webp' && got.headers.get('content-security-policy').includes('sandbox') && gotBytes.toString('latin1', 8, 12) === 'WEBP', 'uploaded background served as WebP with sandbox CSP');
+// A JPEG carrying an EXIF block (with a fake GPS marker) comes back without it.
+const exifJpeg = Buffer.from('/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABgj/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABykX//Z', 'base64');
+const exif = Buffer.concat([Buffer.from('Exif\0\0SECRET-GPS-48.8584N'), Buffer.alloc(8)]);
+const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, (exif.length + 2) >> 8, (exif.length + 2) & 255]), exif]);
+up = await raw('POST', `/boards/${kb.id}/background`, form(Buffer.concat([exifJpeg.subarray(0, 2), app1, exifJpeg.subarray(2)]), 'photo.jpg', 'image/jpeg'));
+check(up.status === 201, 'JPEG with EXIF accepted');
+const clean = Buffer.from(await (await raw('GET', `/boards/${kb.id}/background`)).arrayBuffer());
+check(!clean.includes('SECRET-GPS') && !clean.includes('Exif'), 'EXIF metadata is stripped');
+up = await raw('POST', `/boards/${kb.id}/background`, form(Buffer.concat([png.subarray(0, 16), Buffer.alloc(64)]), 'broken.png', 'image/png'));
+check(up.status === 415, 'corrupt images are rejected');
 up = await raw('POST', `/boards/${kb.id}/background`, form('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', 'x.png', 'image/png'));
 check(up.status === 415, 'non-images (SVG disguised as PNG) are rejected');
 up = await raw('POST', `/boards/${kb.id}/background`, form(Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]), 'big.png', 'image/png'));
