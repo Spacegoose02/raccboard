@@ -17,5 +17,17 @@ export const COLORS = [
   '#3b82f6', '#06b6d4', '#84cc16', '#ec4899', '#64748b',
 ];
 
+// Board background presets. Keys must match BACKGROUND_PRESETS in server/api.js.
+export const BACKGROUNDS = {
+  ocean: 'linear-gradient(135deg, #0ea5e9, #1e3a8a)',
+  sunset: 'linear-gradient(135deg, #f97316, #db2777)',
+  forest: 'linear-gradient(135deg, #22c55e, #14532d)',
+  grape: 'linear-gradient(135deg, #a855f7, #4c1d95)',
+  peach: 'linear-gradient(135deg, #fda4af, #fdba74)',
+  midnight: 'linear-gradient(135deg, #1e293b, #020617)',
+  aurora: 'linear-gradient(135deg, #2dd4bf, #6366f1, #a855f7)',
+  slate: 'linear-gradient(135deg, #94a3b8, #475569)',
+};
+
 // True inside the Android app (Capacitor). The app then talks to a server URL chosen on first launch.
 export const IS_NATIVE = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { COLORS, IS_NATIVE } from '../config.js';
 import { navigate } from '../router.js';
-import { ColorPicker, Menu, useDismiss } from './ui.jsx';
+import { ColorPicker, Menu, backgroundStyle, useDismiss } from './ui.jsx';
 
 export default function Home() {
   const [boards, setBoards] = useState(null);
@@ -97,8 +97,8 @@ function BoardTile({ board, onUpdate, onDelete, onCopy }) {
   ];
   return (
     <div
-      className={`tile ${board.completed_at ? 'completed' : ''}`}
-      style={{ '--tile': board.color || 'var(--accent)' }}
+      className={`tile ${board.completed_at ? 'completed' : ''} ${board.background ? 'has-bg' : ''}`}
+      style={{ '--tile': board.color || 'var(--accent)', ...backgroundStyle(board) }}
       onClick={() => !renaming && navigate(`/b/${board.id}`)}
     >
       {renaming ? (

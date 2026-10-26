@@ -239,6 +239,14 @@ textarea { resize: vertical; }
   height: 100%; display: flex; flex-direction: column;
   background: linear-gradient(180deg, color-mix(in srgb, var(--board-accent) 18%, var(--bg)) 0, var(--bg) 320px);
 }
+.board.has-bg { background-size: cover; background-position: center; background-attachment: fixed; }
+.board.has-bg .board-bar, .board.has-bg .filter-bar { background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(6px); }
+.tile.has-bg { background-size: cover; background-position: center; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.bg-pop { width: 300px; }
+.bg-pop .field-label { margin: 10px 0 6px; font-weight: 600; }
+.bg-preview { height: 64px; border-radius: 6px; background: var(--board-bar); background-size: cover; background-position: center; }
+.bg-url { display: flex; gap: 6px; margin-top: 8px; }
+.bg-url input { flex: 1; min-width: 0; }
 .board-bar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--board-bar); flex: none; flex-wrap: wrap; }
 .board-title { font-size: 18px; font-weight: 700; color: var(--text-strong); padding: 2px 8px; }
 .board-title:hover { background: var(--btn-hover); }
