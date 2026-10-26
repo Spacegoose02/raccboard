@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import sharp from 'sharp';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, uuid, now, logActivity, DEFAULT_LABELS, UPLOAD_DIR, BACKGROUND_DIR } from './db.js';
@@ -264,14 +265,26 @@ const backgroundUpload = multer({
   limits: { fileSize: Number(process.env.MAX_BACKGROUND_MB || 5) * 1024 * 1024, files: 1 },
 });
 
-api.post('/boards/:id/background', backgroundUpload.single('file'), (req, res) => {
+// Re-encode to WebP: drops EXIF/GPS and anything else hidden in the file, applies the photo's
+// rotation, and caps the size. sharp's default pixel limit guards against decompression bombs.
+async function reencodeBackground(buf) {
+  try {
+    return await sharp(buf, { animated: true }).rotate()
+      .resize({ width: 3840, height: 2160, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 85 }).toBuffer();
+  } catch {
+    throw new HttpError(415, 'That image could not be read');
+  }
+}
+
+api.post('/boards/:id/background', backgroundUpload.single('file'), async (req, res) => {
   const board = getBoard(req.params.id, 'owner');
   if (!req.file) throw new HttpError(400, 'No file uploaded');
-  const mime = sniffImage(req.file.buffer);
-  if (!mime) throw new HttpError(415, 'Choose a PNG, JPEG, WebP or GIF image');
+  if (!sniffImage(req.file.buffer)) throw new HttpError(415, 'Choose a PNG, JPEG, WebP or GIF image');
+  const out = await reencodeBackground(req.file.buffer);
   const file = uuid();
-  fs.writeFileSync(path.join(BACKGROUND_DIR, file), req.file.buffer);
-  setBackground(board, `image:${file}:${mime}`);
+  fs.writeFileSync(path.join(BACKGROUND_DIR, file), out);
+  setBackground(board, `image:${file}:image/webp`);
   logActivity(board.id, null, req.who, 'changed the board background');
   res.status(201).json({ ...getBoard(board.id), my_role: boardRole(board.id, req.user) });
 });

@@ -11,6 +11,11 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev
+# sharp (image re-encoding) ships a prebuilt libvips per platform; npm only fetched the build
+# machine's, so add the target's when cross-building (a no-op when they match).
+ARG TARGETARCH
+RUN case "$TARGETARCH" in amd64) cpu=x64 ;; arm64) cpu=arm64 ;; *) cpu= ;; esac; \
+    if [ -n "$cpu" ]; then npm install --no-save --os=linux --cpu=$cpu --libc=glibc sharp; fi
 
 # ---- runtime ----
 FROM node:22-slim
