@@ -64,6 +64,8 @@ Open http://localhost:3000. One process serves both the built client and the API
 | --------------- | -------- | ---------------------------------------- |
 | `PORT`          | `3000`   | HTTP port                                |
 | `DATA_DIR`      | `./data` | Where the SQLite database and uploads go |
+| `BACKUP_HOURS`  | `24`     | How often the database is backed up to `DATA_DIR/backups` (`0` turns it off) |
+| `BACKUP_KEEP`   | `7`      | How many backups to keep |
 | `MAX_UPLOAD_MB` | `25`     | Maximum attachment size                  |
 | `CORS_ORIGIN`   | `*`      | Allowed origin for cross-origin API use  |
 | `ALLOW_SIGNUP`  | `false`  | Let anyone create an account from the sign-in page |

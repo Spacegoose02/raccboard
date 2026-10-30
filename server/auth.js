@@ -100,7 +100,7 @@ export function requireUser(req, _res, next) {
   next();
 }
 
-function requireAdmin(req, _res, next) {
+export function requireAdmin(req, _res, next) {
   if (!req.user) fail(401, 'Not signed in');
   if (req.user.role !== 'admin') fail(403, 'Admins only');
   next();

@@ -46,7 +46,7 @@ export function CommandPalette() {
     const ql = q.trim().toLowerCase();
     const cmds = [...(onBoard ? BOARD_CMDS : []), ...NAV].filter((c) => !ql || match(ql, c.label));
     const boards = found.boards.map((b) => ({ id: `b${b.id}`, label: b.name, hint: 'Board', run: () => { window.location.hash = `/b/${b.id}`; } }));
-    const cards = found.cards.map((c) => ({ id: `c${c.id}`, label: c.title, hint: `${c.board_name} · ${c.list_name}`, run: () => { window.location.hash = `/b/${c.board_id}/c/${c.id}`; } }));
+    const cards = found.cards.map((c) => ({ id: `c${c.id}`, label: c.title, sub: c.snippet && !match(ql, c.title) ? c.snippet : '', hint: `${c.board_name} · ${c.list_name}`, run: () => { window.location.hash = `/b/${c.board_id}/c/${c.id}`; } }));
     return ql ? [...cards, ...boards, ...cmds] : [...cmds, ...boards];
   }, [q, found, onBoard]);
   useEffect(() => { setSel((s) => Math.min(s, Math.max(0, items.length - 1))); }, [items.length]);
@@ -69,7 +69,7 @@ export function CommandPalette() {
           {items.map((it, i) => (
             <li key={it.id} role="option" aria-selected={i === sel} className={i === sel ? 'on' : ''}
               onMouseEnter={() => setSel(i)} onClick={() => run(it)}>
-              <span>{it.label}</span><small>{it.hint}</small>
+              <span>{it.label}{it.sub && <em className="palette-snippet">{it.sub}</em>}</span><small>{it.hint}</small>
             </li>
           ))}
         </ul>

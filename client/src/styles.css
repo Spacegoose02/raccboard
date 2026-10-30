@@ -820,3 +820,6 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 /* Long lists: the browser skips layout and paint for cards scrolled out of view. */
 .card-slot { content-visibility: auto; contain-intrinsic-size: auto 64px; }
 .card-slot.dragging { content-visibility: visible; }
+.palette-snippet { display: block; font-style: normal; font-size: 12px; opacity: 0.65; }
+.backup-list { list-style: none; padding: 0; margin: 12px 0 0; }
+.backup-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
