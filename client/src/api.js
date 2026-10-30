@@ -1,5 +1,6 @@
 import { getSettings } from './settings.js';
 import { IS_NATIVE } from './config.js';
+import { enqueue, flushQueue, pendingCount, isCacheable, isQueueable, readCache, writeCache } from './offline.js';
 
 // In the browser the API is same-origin and the session is an HttpOnly cookie.
 // In the Android app it lives at the configured server URL and the session is a Bearer token.
@@ -23,7 +24,7 @@ function headers(extra = {}) {
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
 }
 
-async function request(method, path, body) {
+async function send(method, path, body) {
   const isForm = body instanceof FormData;
   let res;
   try {
@@ -34,9 +35,10 @@ async function request(method, path, body) {
     });
   } catch {
     window.dispatchEvent(new Event('rb:offline')); // network error: server unreachable
-    throw new Error("Can't reach the server. Check your connection.");
+    throw Object.assign(new Error("Can't reach the server. Check your connection."), { offline: true });
   }
   window.dispatchEvent(new Event('rb:online'));
+  if (pendingCount()) setTimeout(() => flushQueue(send), 0);
   if (res.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event('rb:signed-out'));
   if (!res.ok) {
     let msg = res.statusText;
@@ -47,6 +49,29 @@ async function request(method, path, body) {
   }
   return res.status === 204 ? null : res.json();
 }
+
+// Reads fall back to the last copy seen; queueable edits made offline are saved for later.
+async function request(method, path, body) {
+  const isForm = body instanceof FormData;
+  try {
+    const data = await send(method, path, body);
+    if (method === 'GET' && isCacheable(path)) writeCache(path, data);
+    return data;
+  } catch (e) {
+    if (!e.offline) throw e;
+    if (method === 'GET') {
+      const cached = isCacheable(path) && readCache(path);
+      if (cached) return cached;
+    } else if (!isForm && isQueueable(method, path)) {
+      enqueue(method, path, body);
+      return null;
+    }
+    throw e;
+  }
+}
+
+// Replay queued edits when the browser says the network is back.
+window.addEventListener('online', () => flushQueue(send));
 
 export const api = {
   get: (p) => request('GET', p),
