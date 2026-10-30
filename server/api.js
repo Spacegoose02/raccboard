@@ -12,6 +12,7 @@ import { calendarRouter, feedRouter, scheduleGoogleSync } from './calendar.js';
 import { emailRouter } from './email.js';
 import { sameOriginWrites } from './security.js';
 import { notificationsRouter, notify, notifyMentions } from './notifications.js';
+import { backupsRouter } from './backups.js';
 import { realtimeRouter, broadcastWrites } from './realtime.js';
 import { featuresRouter, runAutomations, createBoardFrom } from './features.js';
 
@@ -43,6 +44,7 @@ api.use(withRequest);
 api.use(broadcastWrites);
 api.use(realtimeRouter);
 api.use(notificationsRouter);
+api.use(backupsRouter);
 // After any successful change, push dates to connected Google calendars (debounced).
 api.use((req, res, next) => {
   if (req.method !== 'GET') res.on('finish', () => { if (res.statusCode < 400) scheduleGoogleSync(); });
@@ -118,16 +120,20 @@ api.get('/boards', (req, res) => {
   res.json(boards);
 });
 
-// Command palette search: open boards and cards you can see, by name/title.
+// Command palette search: boards by name, and cards by full-text match on title, description and
+// comments (prefix matching, so "rac" finds "raccoon"). Only boards you can see.
+const ftsQuery = (q) => (q.match(/[\p{L}\p{N}_]+/gu) || []).slice(0, 8).map((t) => `"${t}"*`).join(' ');
 api.get('/search', (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
   const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const boards = db.prepare(`SELECT b.id, b.name FROM boards b WHERE b.archived = 0 AND ${VISIBLE_BOARDS_SQL}
     AND b.name LIKE ? ESCAPE '\\' ORDER BY b.name COLLATE NOCASE LIMIT 8`).all(...visibleParams(req.user), like);
-  const cards = q ? db.prepare(`SELECT c.id, c.title, l.name AS list_name, b.id AS board_id, b.name AS board_name
-    FROM cards c JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
-    WHERE c.archived = 0 AND l.archived = 0 AND b.archived = 0 AND c.is_template = 0 AND ${VISIBLE_BOARDS_SQL}
-      AND c.title LIKE ? ESCAPE '\\' ORDER BY c.updated_at DESC LIMIT 15`).all(...visibleParams(req.user), like) : [];
+  const match = ftsQuery(q);
+  const cards = match ? db.prepare(`SELECT c.id, c.title, l.name AS list_name, b.id AS board_id, b.name AS board_name,
+      snippet(cards_fts, -1, '[', ']', '…', 8) AS snippet
+    FROM cards_fts f JOIN cards c ON c.id = f.card_id JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
+    WHERE cards_fts MATCH ? AND c.archived = 0 AND l.archived = 0 AND b.archived = 0 AND c.is_template = 0 AND ${VISIBLE_BOARDS_SQL}
+    ORDER BY bm25(cards_fts, 0, 10, 2, 1) LIMIT 15`).all(match, ...visibleParams(req.user)) : [];
   res.json({ boards, cards });
 });
 

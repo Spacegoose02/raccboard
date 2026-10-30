@@ -257,6 +257,27 @@ const migrations = [
   CREATE INDEX IF NOT EXISTS idx_board_shares_board ON board_shares(board_id);
   CREATE INDEX IF NOT EXISTS idx_cards_list_position ON cards(list_id, archived, position);
   `,
+  // v13: full-text search over card titles, descriptions and comments (kept in sync by triggers)
+  `
+  CREATE VIRTUAL TABLE cards_fts USING fts5(card_id UNINDEXED, title, description, comments, tokenize = 'unicode61 remove_diacritics 2');
+  INSERT INTO cards_fts (card_id, title, description, comments)
+    SELECT c.id, c.title, COALESCE(c.description, ''), COALESCE((SELECT group_concat(body, ' ') FROM comments WHERE card_id = c.id), '') FROM cards c;
+  CREATE TRIGGER cards_fts_insert AFTER INSERT ON cards BEGIN
+    INSERT INTO cards_fts (card_id, title, description, comments) VALUES (new.id, new.title, COALESCE(new.description, ''), '');
+  END;
+  CREATE TRIGGER cards_fts_update AFTER UPDATE OF title, description ON cards BEGIN
+    UPDATE cards_fts SET title = new.title, description = COALESCE(new.description, '') WHERE card_id = new.id;
+  END;
+  CREATE TRIGGER cards_fts_delete AFTER DELETE ON cards BEGIN
+    DELETE FROM cards_fts WHERE card_id = old.id;
+  END;
+  CREATE TRIGGER cards_fts_comment_insert AFTER INSERT ON comments BEGIN
+    UPDATE cards_fts SET comments = COALESCE((SELECT group_concat(body, ' ') FROM comments WHERE card_id = new.card_id), '') WHERE card_id = new.card_id;
+  END;
+  CREATE TRIGGER cards_fts_comment_delete AFTER DELETE ON comments BEGIN
+    UPDATE cards_fts SET comments = COALESCE((SELECT group_concat(body, ' ') FROM comments WHERE card_id = old.card_id), '') WHERE card_id = old.card_id;
+  END;
+  `,
 ];
 
 function migrate() {
