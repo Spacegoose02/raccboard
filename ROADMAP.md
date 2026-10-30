@@ -50,6 +50,7 @@
 
 - [ ] @mentions in comments
 - [x] Live board updates: changes from other people and devices appear instantly, with "who's viewing" rings on avatars
+- [x] Command palette (Ctrl+K): jump to any card or board, run board commands; undo/redo (Ctrl+Z / Ctrl+Shift+Z) for moves, completes and archives
 
 ## Phase 3: Views and dates
 
