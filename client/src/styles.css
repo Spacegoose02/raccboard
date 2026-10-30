@@ -787,6 +787,23 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .simple-add textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
 .composer-open.simple-add-list { font-size: 22px; min-width: 44px; }
 
+/* Command palette */
+.palette-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 200; display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.palette { width: min(600px, 94vw); background: var(--surface); color: var(--text); border-radius: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); overflow: hidden; }
+.palette input { width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--border); padding: 14px 16px; font-size: 16px; background: transparent; color: var(--text-strong); outline: none; }
+.palette-list { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
+.palette-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.palette-list li small { opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.palette-list li.on { background: var(--btn-hover); color: var(--text-strong); }
+.palette-empty { padding: 10px; }
+
+/* Undo toast */
+.undo-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 210; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; border-radius: 8px; background: #1f2328; color: #fff; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); font-size: 14px; }
+.undo-toast.error { background: #8b1d1d; }
+.undo-toast .btn { color: #fff; }
+.undo-toast kbd { font-size: 11px; opacity: 0.7; margin-left: 4px; }
+.palette-btn { background: none; border: 0; color: var(--text); padding: 6px 10px; border-radius: 4px; cursor: pointer; font: inherit; }
+.palette-btn:hover { background: var(--btn-hover); color: var(--text-strong); }
 /* Notifications */
 .notif-wrap { position: relative; display: inline-flex; }
 .notif-bell { position: relative; background: none; border: 0; color: var(--text); font-size: 18px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }

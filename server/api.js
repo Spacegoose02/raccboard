@@ -118,6 +118,19 @@ api.get('/boards', (req, res) => {
   res.json(boards);
 });
 
+// Command palette search: open boards and cards you can see, by name/title.
+api.get('/search', (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+  const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const boards = db.prepare(`SELECT b.id, b.name FROM boards b WHERE b.archived = 0 AND ${VISIBLE_BOARDS_SQL}
+    AND b.name LIKE ? ESCAPE '\\' ORDER BY b.name COLLATE NOCASE LIMIT 8`).all(...visibleParams(req.user), like);
+  const cards = q ? db.prepare(`SELECT c.id, c.title, l.name AS list_name, b.id AS board_id, b.name AS board_name
+    FROM cards c JOIN lists l ON l.id = c.list_id JOIN boards b ON b.id = l.board_id
+    WHERE c.archived = 0 AND l.archived = 0 AND b.archived = 0 AND c.is_template = 0 AND ${VISIBLE_BOARDS_SQL}
+      AND c.title LIKE ? ESCAPE '\\' ORDER BY c.updated_at DESC LIMIT 15`).all(...visibleParams(req.user), like) : [];
+  res.json({ boards, cards });
+});
+
 api.post('/boards', (req, res) => {
   // From a built-in template, or a copy of a board you can open.
   if (req.body.template || req.body.from_board) {
