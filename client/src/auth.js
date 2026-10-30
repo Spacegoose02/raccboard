@@ -1,3 +1,4 @@
+import { clearOffline, writeCache } from './offline.js';
 import { useSyncExternalStore } from 'react';
 import { api } from './api.js';
 import { getSettings, updateSettings } from './settings.js';
@@ -30,6 +31,7 @@ function accept({ user, token }) {
   // The browser keeps the HttpOnly cookie; the Android app keeps the token.
   updateSettings({ authToken: token });
   set({ user, setupRequired: false });
+  writeCache('/auth/status', { setupRequired: false, user, signup: state.signup, forgot: state.forgot, oidc: state.oidc }); // offline start-up
   loadUsers();
 }
 
@@ -42,6 +44,7 @@ export const resetPassword = async (token, password) => accept(await api.post('/
 export async function signOut() {
   try { await api.post('/auth/logout'); } catch { /* already gone */ }
   updateSettings({ authToken: '' });
+  clearOffline(); // cached boards and unsent edits belong to the signed-out account
   set({ user: null, users: [] });
 }
 

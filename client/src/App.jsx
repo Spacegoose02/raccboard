@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { APP_MASCOT, APP_NAME, IS_NATIVE } from './config.js';
 import { updateSettings, useSettings } from './settings.js';
+import { pendingCount } from './offline.js';
 import { NotificationBell } from './components/Notifications.jsx';
 import { refreshAuth, signOut, useAuth } from './auth.js';
 import Home from './components/Home.jsx';
@@ -36,6 +37,12 @@ export default function App() {
     window.addEventListener('rb:offline', down);
     window.addEventListener('rb:online', up);
     return () => ['offline', 'online', 'rb:offline', 'rb:online'].forEach((ev, i) => window.removeEventListener(ev, [down, up, down, up][i]));
+  }, []);
+  const [pending, setPending] = useState(pendingCount);
+  useEffect(() => {
+    const on = (e) => setPending(e.detail);
+    window.addEventListener('rb:queue', on);
+    return () => window.removeEventListener('rb:queue', on);
   }, []);
 
   useEffect(() => {
@@ -98,7 +105,12 @@ export default function App() {
           </nav>
         )}
       </header>
-      {offline && <div className="offline-banner" role="status">You're offline. Changes can't be saved until the connection is back.</div>}
+      {(offline || pending > 0) && (
+        <div className="offline-banner" role="status">
+          {offline ? "You're offline. Showing saved boards; edits sync when you reconnect." : 'Syncing offline changes…'}
+          {pending > 0 && ` (${pending} waiting)`}
+        </div>
+      )}
       <main className="main">{content}</main>
     </div>
   );

@@ -50,6 +50,7 @@
 
 - [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email
 - [x] Live board updates: changes from other people and devices appear instantly, with "who's viewing" rings on avatars
+- [x] Offline mode: boards you've opened load without a connection, and edits made offline sync when you reconnect
 
 ## Phase 3: Views and dates
 
