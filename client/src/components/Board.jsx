@@ -246,6 +246,8 @@ export default function Board({ boardId, cardId }) {
   const addCard = async (listId, title) => { await api.post(`/lists/${listId}/cards`, { title }); load(); };
   const addList = async (name) => { await api.post(`/boards/${boardId}/lists`, { name }); load(); };
   const renameBoard = async (name) => { await api.patch(`/boards/${boardId}`, { name }); load(); };
+  const toggleLayout = async () => { await api.patch(`/boards/${boardId}`, { layout: board.layout === 'simple' ? null : 'simple' }); load(); };
+  const archiveCard = async (card) => { await api.patch(`/cards/${card.id}`, { archived: true }); load(); };
   const toggleBoardComplete = async () => { await api.patch(`/boards/${boardId}`, { completed: !board.completed_at }); load(); };
 
   const role = board.my_role;
@@ -261,10 +263,11 @@ export default function Board({ boardId, cardId }) {
     load();
   };
   // Dragging is off for viewers, and while filtering (hidden cards would make positions ambiguous).
-  const ctx = { cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate };
+  const ctx = { cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
+    simple: board.layout === 'simple', archiveCard };
 
   return (
-    <div className={`board ${board.background ? 'has-bg' : ''}`} style={{ '--board-accent': board.color || 'var(--accent)', ...backgroundStyle(board) }}>
+    <div className={`board ${ctx.simple ? 'simple-layout' : ''} ${board.background ? 'has-bg' : ''}`} style={{ '--board-accent': board.color || 'var(--accent)', ...backgroundStyle(board) }}>
       <div className="board-bar">
         <InlineEdit value={board.name} onSave={renameBoard} className="board-title" readOnly={!isOwner} />
         <div className="view-switch" role="tablist" aria-label="View">
@@ -285,6 +288,7 @@ export default function Board({ boardId, cardId }) {
         {isOwner && <a className="btn subtle wide-only" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowRules(true)} title="Automation rules">⚡ Automation</button>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowArchived(true)}>🗃 Archived items</button>}
+        {isOwner && <button className="btn subtle wide-only" onClick={toggleLayout} title="Switch how cards look on this board">{board.layout === 'simple' ? '▤ Detailed cards' : '☐ Simple cards'}</button>}
         {isOwner && <button className="btn subtle wide-only" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen board' : '✓ Complete board'}</button>}
         {canEdit && (
           <Menu className="narrow-only" items={[
@@ -292,6 +296,7 @@ export default function Board({ boardId, cardId }) {
             isOwner && { label: '⚙ Board settings', onClick: () => navigate(`/settings/board/${boardId}`) },
             { label: '⚡ Automation', onClick: () => setShowRules(true) },
             { label: '🗃 Archived items', onClick: () => setShowArchived(true) },
+            isOwner && { label: board.layout === 'simple' ? '▤ Detailed cards' : '☐ Simple cards', onClick: toggleLayout },
             isOwner && { label: board.completed_at ? '↺ Reopen board' : '✓ Complete board', onClick: toggleBoardComplete },
           ]} />
         )}
@@ -440,6 +445,8 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards })
     );
   }
 
+  if (ctx.simple) return <SimpleListColumn {...{ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards, collapse, setNodeRef, style, attributes, listeners, isDragging }} />;
+
   return (
     <div ref={setNodeRef} style={style} className={`list ${isDragging ? 'dragging' : ''}`} data-list-id={list.id}>
       <div className="list-head" {...attributes} {...listeners}>
@@ -477,6 +484,50 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards })
   );
 }
 
+// Simple layout: chevron, drag handle, title, count and menu; an always-open "Card title…" input.
+function SimpleListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards, collapse, setNodeRef, style, attributes, listeners, isDragging }) {
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState('');
+  const showInput = cardIds.length > 0 || adding;
+  const submit = async () => {
+    const v = text.trim();
+    if (!v) return;
+    setText('');
+    await onAddCard(list.id, v);
+  };
+  return (
+    <div ref={setNodeRef} style={style} className={`list simple ${isDragging ? 'dragging' : ''}`} data-list-id={list.id}>
+      <div className="list-head">
+        <span className="drag-handle" title="Drag list" {...attributes} {...listeners}>⠿</span>
+        <button className="icon-btn chevron" title="Collapse list" aria-label="Collapse list" onClick={() => collapse(true)}>⌄</button>
+        <InlineEdit value={list.name} onSave={(name) => onUpdate(list.id, { name })} className="list-name" readOnly={!ctx.canEdit} />
+        <span className="list-count">{cardIds.length}</span>
+        {ctx.canEdit && <Menu label="⋮" items={[
+          { label: 'Archive list', onClick: () => onUpdate(list.id, { archived: true }) },
+          cardIds.length > 0 && { label: 'Archive all cards in this list', onClick: () => onArchiveCards(list) },
+        ]} />}
+      </div>
+      <div className="cards">
+        <SortableContext items={cardIds.map((id) => CARD + id)} strategy={verticalListSortingStrategy}>
+          {cardIds.map((id) => ctx.cardsById[id] && <SortableCard key={id} card={ctx.cardsById[id]} ctx={ctx} />)}
+        </SortableContext>
+      </div>
+      {ctx.canEdit && (
+        <div className="simple-add">
+          {showInput ? (
+            <input placeholder="Card title…" value={text} autoFocus={adding} onChange={(e) => setText(e.target.value)}
+              onBlur={() => !text && setAdding(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+                if (e.key === 'Escape') { setText(''); setAdding(false); e.target.blur(); }
+              }} />
+          ) : <button className="btn simple-add-btn" onClick={() => setAdding(true)}>+Add a card</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DateForm({ value, onSave }) {
   const [v, setV] = useState(value ? value.slice(0, 10) : '');
   return (
@@ -501,6 +552,21 @@ function SortableCard({ card, ctx }) {
 }
 
 function CardFace({ card, ctx, overlay }) {
+  if (ctx.simple) {
+    return (
+      <div className={`card simple-card ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''}`}
+        onClick={() => !overlay && navigate(`/b/${ctx.boardId}/c/${card.id}`)}>
+        <input type="checkbox" checked={!!card.completed} disabled={!ctx.canEdit} aria-label={card.completed ? 'Mark incomplete' : 'Mark complete'}
+          onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onChange={() => ctx.toggleCard(card)} />
+        <span className="card-title">{card.title}</span>
+        {ctx.canEdit && !overlay && <Menu label="⋮" items={[
+          { label: 'Open card', onClick: () => navigate(`/b/${ctx.boardId}/c/${card.id}`) },
+          { label: card.completed ? 'Mark incomplete' : 'Mark complete', onClick: () => ctx.toggleCard(card) },
+          { label: 'Archive card', onClick: () => ctx.archiveCard(card) },
+        ]} />}
+      </div>
+    );
+  }
   const labels = card.label_ids.map((id) => ctx.labelsById[id]).filter(Boolean);
   const due = dueStatus(card.due_date, card.completed);
   const checkDone = card.check_total > 0 && card.check_done === card.check_total;

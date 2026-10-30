@@ -195,7 +195,8 @@ api.patch('/boards/:id', (req, res) => {
   const board = getBoard(req.params.id, 'owner');
   const b = req.body;
   db.transaction(() => {
-    patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => colorOr(v, null), archived: bool });
+    patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => colorOr(v, null), archived: bool,
+      layout: (v) => (v === 'simple' ? 'simple' : null) });
     if ('background' in b) setBackground(board, cleanBackground(b.background));
     if ('completed' in b) {
       db.prepare('UPDATE boards SET completed_at = ? WHERE id = ?').run(b.completed ? now() : null, board.id);

@@ -33,6 +33,19 @@ const doneLabel = homeFull.labels.find((l) => l.name === 'Done');
 check(homeRules.some((r) => r.action === 'add_label' && r.action_value === doneLabel.id), 'template label rules point at the label, not a same-named list');
 await call('DELETE', `/boards/${home.id}`);
 
+const simple = await call('POST', '/boards', { template: 'simple' });
+const simpleFull = await call('GET', `/boards/${simple.id}`);
+check(simpleFull.board.layout === 'simple', 'simple template boards use the simple layout');
+check(simpleFull.lists.map((l) => l.name).join() === 'To do,Doing,Done' && simpleFull.cards.length === 0, 'simple template creates empty To do/Doing/Done lists');
+check(simpleFull.labels.length === 0 && (await call('GET', `/boards/${simple.id}/automations`)).length === 0, 'simple template has no labels or rules');
+const simpleCopy = await call('POST', '/boards', { from_board: simple.id });
+check((await call('GET', `/boards/${simpleCopy.id}`)).board.layout === 'simple', 'copying a simple board keeps its layout');
+await call('PATCH', `/boards/${simpleCopy.id}`, { layout: null });
+check((await call('GET', `/boards/${simpleCopy.id}`)).board.layout === null, 'board layout can be switched back');
+check(full.board.layout === null, 'other templates keep the normal layout');
+await call('DELETE', `/boards/${simple.id}`);
+await call('DELETE', `/boards/${simpleCopy.id}`);
+
 // Automation: moving to Done completes the card and Doing joins the mover
 const card = await call('POST', `/lists/${todo.id}/cards`, { title: 'Automate me' });
 await call('POST', `/cards/${card.id}/move`, { list_id: doing.id });
