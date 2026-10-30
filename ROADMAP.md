@@ -48,7 +48,7 @@
 
 ## Phase 2: Accounts and sharing
 
-- [ ] @mentions in comments
+- [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email
 - [x] Live board updates: changes from other people and devices appear instantly, with "who's viewing" rings on avatars
 - [x] Command palette (Ctrl+K): jump to any card or board, run board commands; undo/redo (Ctrl+Z / Ctrl+Shift+Z) for moves, completes and archives
 
@@ -56,7 +56,7 @@
 
 - [ ] Two-way Google Calendar sync (edits in Google flow back to cards)
 - [ ] Due dates on lists and sublists everywhere, including roll-ups on card faces and boards
-- [ ] Reminders and notifications
+- [x] Reminders and notifications
 
 ## Phase 4: Extras
 

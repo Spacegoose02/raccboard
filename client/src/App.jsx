@@ -3,6 +3,7 @@ import { APP_MASCOT, APP_NAME, IS_NATIVE } from './config.js';
 import { updateSettings, useSettings } from './settings.js';
 import { CommandPalette } from './components/CommandPalette.jsx';
 import { UndoToast } from './components/UndoToast.jsx';
+import { NotificationBell } from './components/Notifications.jsx';
 import { refreshAuth, signOut, useAuth } from './auth.js';
 import Home from './components/Home.jsx';
 import Board from './components/Board.jsx';
@@ -87,6 +88,7 @@ export default function App() {
             <a href="#/calendar" className={route.page === 'calendar' ? 'active' : ''} title="Calendar">📅<span className="hide-sm"> Calendar</span></a>
             <button className="palette-btn" onClick={() => window.dispatchEvent(new Event('rb:palette'))} title="Search and commands (Ctrl+K)">🔍<span className="hide-sm"> Ctrl K</span></button>
             <a href="#/settings" className={route.page === 'settings' ? 'active' : ''} title="Settings">⚙<span className="hide-sm"> Settings</span></a>
+            <NotificationBell />
             <Menu
               className="user-menu"
               label={<Avatar user={auth.user} size={30} />}
