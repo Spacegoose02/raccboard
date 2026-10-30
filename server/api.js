@@ -11,6 +11,7 @@ import { datedEvents, toEvent, buildIcs } from './dates.js';
 import { calendarRouter, feedRouter, scheduleGoogleSync } from './calendar.js';
 import { emailRouter } from './email.js';
 import { sameOriginWrites } from './security.js';
+import { realtimeRouter, broadcastWrites } from './realtime.js';
 import { featuresRouter, runAutomations, createBoardFrom } from './features.js';
 
 export const api = express.Router();
@@ -19,7 +20,7 @@ export const api = express.Router();
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 api.use((req, res, next) => {
   res.set('Access-Control-Allow-Origin', CORS_ORIGIN);
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Client-Id');
   res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
@@ -38,6 +39,8 @@ api.use(feedRouter);
 api.use(authRouter);
 api.use(requireUser);
 api.use(withRequest);
+api.use(broadcastWrites);
+api.use(realtimeRouter);
 // After any successful change, push dates to connected Google calendars (debounced).
 api.use((req, res, next) => {
   if (req.method !== 'GET') res.on('finish', () => { if (res.statusCode < 400) scheduleGoogleSync(); });

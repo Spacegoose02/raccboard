@@ -578,6 +578,7 @@ img.avatar { object-fit: cover; }
 /* Sharing, teams and members */
 .board-people { display: flex; align-items: center; }
 .board-people .avatar { margin-left: -6px; box-shadow: 0 0 0 2px var(--bg); }
+.board-people .viewing .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px #3fb950; }
 .board-people .avatar:first-child { margin-left: 0; }
 .more-people { font-size: 12px; color: var(--muted); margin-left: 4px; }
 .role-badge { border: 1px solid var(--border); }

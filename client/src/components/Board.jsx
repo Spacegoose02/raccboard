@@ -6,7 +6,7 @@ import {
   SortableContext, arrayMove, horizontalListSortingStrategy, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { api } from '../api.js';
+import { api, apiUrl, CLIENT_ID } from '../api.js';
 import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
 import { dueStatus, formatDate, parseDate } from '../dates.js';
@@ -92,10 +92,20 @@ export default function Board({ boardId, cardId }) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     const onVisible = () => { if (document.visibilityState === 'visible') load(); };
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 30000);
+    // Live updates arrive over the event stream; the slow poll is a fallback for proxies that block it.
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 120000);
     document.addEventListener('visibilitychange', onVisible);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [load]);
+  const [viewers, setViewers] = useState([]);
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') return undefined;
+    const es = new EventSource(apiUrl(`/boards/${boardId}/events?client=${CLIENT_ID}`));
+    let pending;
+    es.addEventListener('change', () => { clearTimeout(pending); pending = setTimeout(load, 250); });
+    es.addEventListener('presence', (e) => setViewers(JSON.parse(e.data)));
+    return () => { clearTimeout(pending); es.close(); };
+  }, [boardId, load]);
 
   const cardsById = useMemo(() => Object.fromEntries((data?.cards || []).map((c) => [c.id, c])), [data]);
   const listsById = useMemo(() => Object.fromEntries((data?.lists || []).map((l) => [l.id, l])), [data]);
@@ -287,7 +297,10 @@ export default function Board({ boardId, cardId }) {
         {board.archived ? <span className="badge">Archived</span> : null}
         <div className="spacer" />
         <div className="board-people" title="People on this board">
-          {data.people.slice(0, 6).map((p) => <Avatar key={p.id} user={p} size={26} />)}
+          {data.people.slice(0, 6).map((p) => {
+            const here = p.id !== me?.id && viewers.some((v) => v.id === p.id);
+            return <span key={p.id} className={here ? 'viewing' : undefined} title={here ? `${p.display_name} is viewing` : p.display_name}><Avatar user={p} size={26} /></span>;
+          })}
           {data.people.length > 6 && <span className="more-people">+{data.people.length - 6}</span>}
         </div>
         <button className="btn subtle" onClick={() => setShowShare(true)}>👪 {isOwner ? 'Share' : 'Members'}</button>
