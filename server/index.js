@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,8 @@ app.disable('x-powered-by');
 // Behind a reverse proxy (Nginx Proxy Manager, Caddy, Traefik…) set TRUST_PROXY=true so HTTPS is detected.
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
 app.use(securityHeaders);
+// gzip/brotli for JSON and the app bundle; the live-update event stream must stay unbuffered.
+app.use(compression({ filter: (req, res) => !String(res.getHeader('Content-Type') || '').startsWith('text/event-stream') && compression.filter(req, res) }));
 app.use('/api', api);
 
 if (fs.existsSync(dist)) {

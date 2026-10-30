@@ -816,3 +816,7 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .notif-list li.unread .notif-text { color: var(--text-strong); font-weight: 600; }
 .notif-text small { display: block; font-weight: 400; opacity: 0.7; font-size: 12px; }
 .notif-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; }
+
+/* Long lists: the browser skips layout and paint for cards scrolled out of view. */
+.card-slot { content-visibility: auto; contain-intrinsic-size: auto 64px; }
+.card-slot.dragging { content-visibility: visible; }

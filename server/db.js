@@ -244,6 +244,19 @@ const migrations = [
   CREATE UNIQUE INDEX idx_notifications_dedupe ON notifications(user_id, dedupe) WHERE dedupe IS NOT NULL;
   ALTER TABLE users ADD COLUMN notify_email INTEGER NOT NULL DEFAULT 1;
   `,
+  // v12: indexes for the per-card counts on board load (they were full scans per card)
+  `
+  CREATE INDEX IF NOT EXISTS idx_comments_card ON comments(card_id);
+  CREATE INDEX IF NOT EXISTS idx_attachments_card ON attachments(card_id);
+  CREATE INDEX IF NOT EXISTS idx_checklists_card ON checklists(card_id);
+  CREATE INDEX IF NOT EXISTS idx_checklist_items_checklist ON checklist_items(checklist_id);
+  CREATE INDEX IF NOT EXISTS idx_card_labels_card ON card_labels(card_id);
+  CREATE INDEX IF NOT EXISTS idx_card_labels_label ON card_labels(label_id);
+  CREATE INDEX IF NOT EXISTS idx_labels_board ON labels(board_id);
+  CREATE INDEX IF NOT EXISTS idx_activity_board ON activity(board_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_board_shares_board ON board_shares(board_id);
+  CREATE INDEX IF NOT EXISTS idx_cards_list_position ON cards(list_id, archived, position);
+  `,
 ];
 
 function migrate() {
