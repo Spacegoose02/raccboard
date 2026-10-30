@@ -6,3 +6,5 @@ data/
 .DS_Store
 Thumbs.db
 release/
+test-results/
+playwright-report/

@@ -1,3 +1,4 @@
+// @ts-check
 // Dates are stored as "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm" (local time).
 
 export function parseDate(v) {
@@ -44,4 +45,4 @@ export function timeAgo(iso) {
 export const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const fromYmd = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
 export const addDays = (s, n) => { const d = fromYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
-export const daysBetween = (a, b) => Math.round((fromYmd(b) - fromYmd(a)) / 864e5);
+export const daysBetween = (a, b) => Math.round((fromYmd(b).getTime() - fromYmd(a).getTime()) / 864e5);

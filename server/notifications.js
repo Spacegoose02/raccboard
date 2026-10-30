@@ -1,3 +1,4 @@
+// @ts-check
 import express from 'express';
 import { db, now, uuid } from './db.js';
 import { boardRole } from './access.js';
@@ -10,6 +11,9 @@ export const notificationsRouter = express.Router();
 
 const cardLink = (boardId, cardId) => (PUBLIC_URL() ? `${PUBLIC_URL()}/#/b/${boardId}${cardId ? `/c/${cardId}` : ''}` : '');
 
+/**
+ * @param {{ userId: string, kind: string, text: string, boardId?: string, cardId?: string, actor?: string, dedupe?: string }} n
+ */
 export function notify({ userId, kind, boardId, cardId, actor, text, dedupe }) {
   const r = db.prepare(`INSERT OR IGNORE INTO notifications (id, user_id, kind, board_id, card_id, actor, text, dedupe, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(uuid(), userId, kind, boardId || null, cardId || null, actor || null, text, dedupe || null, now());

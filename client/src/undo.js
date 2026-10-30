@@ -1,3 +1,4 @@
+// @ts-check
 // App-wide undo/redo. Actions push { label, undo, redo } after they succeed; Ctrl+Z / Ctrl+Shift+Z
 // (or Ctrl+Y) replay them, and a toast offers a one-click Undo for the latest action.
 const done = [];

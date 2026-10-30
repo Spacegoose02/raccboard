@@ -15,7 +15,10 @@
     "build": "vite build",
     "start": "node server/index.js",
     "smoke": "node scripts/smoke.js",
-    "test": "node scripts/test-tasks.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -p jsconfig.json",
     "icons": "node scripts/icons.js",
     "android:sync": "npm run build && cap sync android",
     "android:apk": "node scripts/apk.js debug",
@@ -46,8 +49,12 @@
     "@capacitor/android": "^8.5.3",
     "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
+    "@playwright/test": "^1.63.0",
+    "@types/express": "^5.0.6",
     "@vitejs/plugin-react": "^6.1.2",
     "concurrently": "^10.0.6",
-    "vite": "^8.3.4"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   }
 }
