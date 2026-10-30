@@ -11,14 +11,13 @@ import { pushUndo } from '../undo.js';
 import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
 import { dueStatus, formatDate, parseDate } from '../dates.js';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { countTasks, toggleTask } from '../tasks.js';
 import { CardCover, CompleteCircle, Composer, InlineEdit, Menu, Popover, backgroundStyle } from './ui.jsx';
 import { BackgroundPicker } from './BackgroundPicker.jsx';
 import { Avatar } from './Avatar.jsx';
 import { ShareDialog } from './Share.jsx';
 const CardModal = lazy(() => import('./CardModal.jsx'));
+// Markdown rendering is ~150 KB, so it loads only when a board shows card bodies.
+const SimpleMarkdown = lazy(() => import('./SimpleMarkdown.jsx'));
 const ListView = lazy(() => import('./ListView.jsx'));
 const CalendarView = lazy(() => import('./CalendarView.jsx'));
 const Automations = lazy(() => import('./Automations.jsx'));
@@ -91,6 +90,12 @@ export default function Board({ boardId, cardId }) {
     }
   }, [boardId]);
   useEffect(() => { load(); }, [load]);
+  // Warm the lazy chunks once the board is up, so the service worker has them for offline use.
+  useEffect(() => {
+    const warm = () => { import('./SimpleMarkdown.jsx'); import('./CardModal.jsx'); };
+    const id = 'requestIdleCallback' in window ? window.requestIdleCallback(warm) : setTimeout(warm, 1500);
+    return () => ('cancelIdleCallback' in window ? window.cancelIdleCallback(id) : clearTimeout(id));
+  }, []);
   useEffect(() => {
     const onVisible = () => { if (document.visibilityState === 'visible') load(); };
     // Live updates arrive over the event stream; the slow poll is a fallback for proxies that block it.
@@ -603,29 +608,6 @@ function SortableCard({ card, ctx }) {
   );
 }
 
-const mdLink = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()} /> };
-
-// Card body Markdown (no raw HTML) whose task checkboxes can be ticked in place.
-function SimpleMarkdown({ card, ctx }) {
-  let n = 0;
-  const { done, total } = countTasks(card.description);
-  const components = {
-    ...mdLink,
-    input: ({ type, checked }) => {
-      if (type !== 'checkbox') return null;
-      const i = n++;
-      return <input type="checkbox" checked={!!checked} disabled={!ctx.canEdit} onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()} onChange={() => ctx.setDescription(card, toggleTask(card.description, i))} />;
-    },
-  };
-  return (
-    <div className="markdown simple-md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{card.description}</ReactMarkdown>
-      {total > 1 && <span className={`badge ${done === total ? 'done' : 'plain'}`}>☑ {done}/{total}</span>}
-    </div>
-  );
-}
-
 function CardFace({ card, ctx, overlay }) {
   if (ctx.simple) {
     return (
@@ -635,7 +617,7 @@ function CardFace({ card, ctx, overlay }) {
           onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onChange={() => ctx.toggleCard(card)} />
         <div className="simple-body">
           <span className="card-title">{card.title}</span>
-          {card.description && <SimpleMarkdown card={card} ctx={ctx} />}
+          {card.description && <Suspense fallback={<div className="markdown simple-md">{card.description}</div>}><SimpleMarkdown card={card} ctx={ctx} /></Suspense>}
         </div>
         {ctx.canEdit && !overlay && <Menu label="⋮" items={[
           { label: 'Open card', onClick: () => navigate(`/b/${ctx.boardId}/c/${card.id}`) },
