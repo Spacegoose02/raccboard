@@ -24,7 +24,8 @@
     "smoke:google": "node scripts/smoke-google.js",
     "smoke:email": "node scripts/smoke-email.js",
     "smoke:cli": "node scripts/smoke-cli.js",
-    "smoke:features": "node scripts/smoke-features.js"
+    "smoke:features": "node scripts/smoke-features.js",
+    "smoke:notifications": "node scripts/smoke-notifications.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

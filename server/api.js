@@ -11,6 +11,7 @@ import { datedEvents, toEvent, buildIcs } from './dates.js';
 import { calendarRouter, feedRouter, scheduleGoogleSync } from './calendar.js';
 import { emailRouter } from './email.js';
 import { sameOriginWrites } from './security.js';
+import { notificationsRouter, notify, notifyMentions } from './notifications.js';
 import { realtimeRouter, broadcastWrites } from './realtime.js';
 import { featuresRouter, runAutomations, createBoardFrom } from './features.js';
 
@@ -41,6 +42,7 @@ api.use(requireUser);
 api.use(withRequest);
 api.use(broadcastWrites);
 api.use(realtimeRouter);
+api.use(notificationsRouter);
 // After any successful change, push dates to connected Google calendars (debounced).
 api.use((req, res, next) => {
   if (req.method !== 'GET') res.on('finish', () => { if (res.statusCode < 400) scheduleGoogleSync(); });
@@ -498,6 +500,9 @@ api.put('/cards/:id/members/:userId', (req, res) => {
   if (!boardRole(card.board_id, user)) throw new HttpError(400, `${user.display_name} can't open this board. Share it with them first.`);
   const r = db.prepare('INSERT OR IGNORE INTO card_members (card_id, user_id) VALUES (?, ?)').run(card.id, user.id);
   if (r.changes) logActivity(card.board_id, card.id, req.who, user.id === req.user.id ? 'joined this card' : `added ${user.display_name} to this card`);
+  if (r.changes && user.id !== req.user.id) {
+    notify({ userId: user.id, kind: 'assigned', boardId: card.board_id, cardId: card.id, actor: req.who.name, text: `${req.who.name} added you to "${card.title}"` });
+  }
   res.json({ ok: true });
 });
 
@@ -621,6 +626,7 @@ api.post('/cards/:id/comments', (req, res) => {
   const id = uuid();
   db.prepare('INSERT INTO comments (id, card_id, author, user_id, body, created_at) VALUES (?, ?, ?, ?, ?, ?)')
     .run(id, card.id, req.who.name, req.who.id, body, now());
+  notifyMentions({ body, card, who: req.who });
   res.status(201).json(db.prepare('SELECT * FROM comments WHERE id = ?').get(id));
 });
 

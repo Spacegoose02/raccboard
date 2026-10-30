@@ -187,3 +187,10 @@ emailRouter.post('/cards/:id/email', async (req, res) => {
   logActivity(card.board_id, card.id, req.who, `emailed this card to ${to.join(', ')}`);
   res.json({ ok: true, to });
 });
+
+// A short notification email (mentions, assignments, reminders). Silently skipped without SMTP.
+export async function sendNotificationEmail(user, subject, text) {
+  if (!user.email || !configured()) return;
+  const s = smtpSettings();
+  await transport(s).sendMail({ from: s.from, to: user.email, subject, text });
+}
