@@ -353,10 +353,11 @@ api.post('/lists/:id/cards', (req, res) => {
   const list = getList(req.params.id);
   const id = uuid();
   const title = str(req.body.title, 300) || 'New card';
+  const description = typeof req.body.description === 'string' ? req.body.description.slice(0, 100000) : '';
   const t = now();
   db.transaction(() => {
-    db.prepare(`INSERT INTO cards (id, list_id, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(id, list.id, title, nextPos('cards', 'list_id', list.id), t, t);
+    db.prepare(`INSERT INTO cards (id, list_id, title, description, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, list.id, title, description, nextPos('cards', 'list_id', list.id), t, t);
     logActivity(list.board_id, id, req.who, `added this card to ${list.name}`);
   })();
   runAutomations('card_added', { cardId: id, listId: list.id, who: req.who });

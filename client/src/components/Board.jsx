@@ -10,6 +10,9 @@ import { api } from '../api.js';
 import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
 import { dueStatus, formatDate, parseDate } from '../dates.js';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { countTasks, toggleTask } from '../tasks.js';
 import { CardCover, CompleteCircle, Composer, InlineEdit, Menu, Popover, backgroundStyle } from './ui.jsx';
 import { BackgroundPicker } from './BackgroundPicker.jsx';
 import { Avatar } from './Avatar.jsx';
@@ -243,7 +246,11 @@ export default function Board({ boardId, cardId }) {
     await api.post(`/lists/${list.id}/archive-cards`);
     load();
   };
-  const addCard = async (listId, title) => { await api.post(`/lists/${listId}/cards`, { title }); load(); };
+  const addCard = async (listId, title, description) => { await api.post(`/lists/${listId}/cards`, { title, description }); load(); };
+  const setDescription = async (card, description) => {
+    patchCardLocal(card.id, { description });
+    try { await api.patch(`/cards/${card.id}`, { description }); } catch (e) { patchCardLocal(card.id, { description: card.description }); alert(e.message); }
+  };
   const addList = async (name) => { await api.post(`/boards/${boardId}/lists`, { name }); load(); };
   const renameBoard = async (name) => { await api.patch(`/boards/${boardId}`, { name }); load(); };
   const toggleLayout = async () => { await api.patch(`/boards/${boardId}`, { layout: board.layout === 'simple' ? null : 'simple' }); load(); };
@@ -264,7 +271,7 @@ export default function Board({ boardId, cardId }) {
   };
   // Dragging is off for viewers, and while filtering (hidden cards would make positions ambiguous).
   const ctx = { cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
-    simple: board.layout === 'simple', archiveCard };
+    simple: board.layout === 'simple', archiveCard, setDescription };
 
   return (
     <div className={`board ${ctx.simple ? 'simple-layout' : ''} ${board.background ? 'has-bg' : ''}`} style={{ '--board-accent': board.color || 'var(--accent)', ...backgroundStyle(board) }}>
@@ -350,7 +357,9 @@ export default function Board({ boardId, cardId }) {
           </SortableContext>
           {canEdit && (
             <div className="add-list">
-              <Composer openLabel="+ Add another list" placeholder="Enter list name…" buttonLabel="Add list" onAdd={addList} />
+              {ctx.simple
+                ? <Composer className="simple-add-list" openLabel={data.lists.length ? '+' : '+ Add a section'} placeholder="Section name…" buttonLabel="Add section" onAdd={addList} />
+                : <Composer openLabel="+ Add another list" placeholder="Enter list name…" buttonLabel="Add list" onAdd={addList} />}
             </div>
           )}
         </div>
@@ -490,10 +499,10 @@ function SimpleListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCa
   const [text, setText] = useState('');
   const showInput = cardIds.length > 0 || adding;
   const submit = async () => {
-    const v = text.trim();
-    if (!v) return;
+    const [first, ...rest] = text.trim().split('\n');
+    if (!first.trim()) return;
     setText('');
-    await onAddCard(list.id, v);
+    await onAddCard(list.id, first.trim(), rest.join('\n').trim());
   };
   return (
     <div ref={setNodeRef} style={style} className={`list simple ${isDragging ? 'dragging' : ''}`} data-list-id={list.id}>
@@ -515,10 +524,11 @@ function SimpleListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCa
       {ctx.canEdit && (
         <div className="simple-add">
           {showInput ? (
-            <input placeholder="Card title…" value={text} autoFocus={adding} onChange={(e) => setText(e.target.value)}
+            <textarea rows={text.includes('\n') ? Math.min(8, text.split('\n').length) : 1} placeholder="Card title…" title="Enter adds the card. Shift+Enter for more lines of Markdown, e.g. - [ ] task"
+              value={text} autoFocus={adding} onChange={(e) => setText(e.target.value)}
               onBlur={() => !text && setAdding(false)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
                 if (e.key === 'Escape') { setText(''); setAdding(false); e.target.blur(); }
               }} />
           ) : <button className="btn simple-add-btn" onClick={() => setAdding(true)}>+Add a card</button>}
@@ -551,6 +561,29 @@ function SortableCard({ card, ctx }) {
   );
 }
 
+const mdLink = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()} /> };
+
+// Card body Markdown (no raw HTML) whose task checkboxes can be ticked in place.
+function SimpleMarkdown({ card, ctx }) {
+  let n = 0;
+  const { done, total } = countTasks(card.description);
+  const components = {
+    ...mdLink,
+    input: ({ type, checked }) => {
+      if (type !== 'checkbox') return null;
+      const i = n++;
+      return <input type="checkbox" checked={!!checked} disabled={!ctx.canEdit} onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()} onChange={() => ctx.setDescription(card, toggleTask(card.description, i))} />;
+    },
+  };
+  return (
+    <div className="markdown simple-md">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{card.description}</ReactMarkdown>
+      {total > 1 && <span className={`badge ${done === total ? 'done' : 'plain'}`}>☑ {done}/{total}</span>}
+    </div>
+  );
+}
+
 function CardFace({ card, ctx, overlay }) {
   if (ctx.simple) {
     return (
@@ -558,7 +591,10 @@ function CardFace({ card, ctx, overlay }) {
         onClick={() => !overlay && navigate(`/b/${ctx.boardId}/c/${card.id}`)}>
         <input type="checkbox" checked={!!card.completed} disabled={!ctx.canEdit} aria-label={card.completed ? 'Mark incomplete' : 'Mark complete'}
           onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onChange={() => ctx.toggleCard(card)} />
-        <span className="card-title">{card.title}</span>
+        <div className="simple-body">
+          <span className="card-title">{card.title}</span>
+          {card.description && <SimpleMarkdown card={card} ctx={ctx} />}
+        </div>
         {ctx.canEdit && !overlay && <Menu label="⋮" items={[
           { label: 'Open card', onClick: () => navigate(`/b/${ctx.boardId}/c/${card.id}`) },
           { label: card.completed ? 'Mark incomplete' : 'Mark complete', onClick: () => ctx.toggleCard(card) },

@@ -22,11 +22,11 @@ export const BOARD_TEMPLATES = [
   {
     id: 'simple',
     name: 'Simple list',
-    description: 'Plain lists of checkbox cards. No labels, dates or extras on the cards.',
+    description: 'Starts empty: add your own sections with +, and simple Markdown cards with checkboxes.',
     color: '#64748b',
     layout: 'simple',
     labels: [],
-    lists: [{ name: 'To do' }, { name: 'Doing' }, { name: 'Done' }],
+    lists: [],
   },
   {
     id: 'homeboard',
