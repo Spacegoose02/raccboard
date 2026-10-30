@@ -92,8 +92,8 @@ export function createBoardFrom({ user, who, name, color, templateId, fromBoardI
   db.transaction(() => {
     if (fromBoardId) {
       const src = db.prepare('SELECT * FROM boards WHERE id = ?').get(fromBoardId);
-      db.prepare('INSERT INTO boards (id, name, color, position, created_at, owner_id) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(boardId, name || `${src.name} (copy)`, color || src.color, position, now(), user.id);
+      db.prepare('INSERT INTO boards (id, name, color, position, created_at, owner_id, layout) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(boardId, name || `${src.name} (copy)`, color || src.color, position, now(), user.id, src.layout);
       const labelMap = new Map();
       for (const l of db.prepare('SELECT * FROM labels WHERE board_id = ? ORDER BY rowid').all(src.id)) {
         const id = uuid();
@@ -123,8 +123,8 @@ export function createBoardFrom({ user, who, name, color, templateId, fromBoardI
       return;
     }
     const tpl = BOARD_TEMPLATES.find((t) => t.id === templateId) || fail(400, 'Unknown template');
-    db.prepare('INSERT INTO boards (id, name, color, position, created_at, owner_id) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(boardId, name || tpl.name, color || tpl.color, position, now(), user.id);
+    db.prepare('INSERT INTO boards (id, name, color, position, created_at, owner_id, layout) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(boardId, name || tpl.name, color || tpl.color, position, now(), user.id, tpl.layout || null);
     const labelIds = new Map();
     for (const l of tpl.labels || DEFAULT_LABELS) {
       const id = uuid();

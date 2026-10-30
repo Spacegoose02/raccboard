@@ -20,6 +20,15 @@ export const BOARD_TEMPLATES = [
     ],
   },
   {
+    id: 'simple',
+    name: 'Simple list',
+    description: 'Starts empty: add your own sections with +, and simple Markdown cards with checkboxes.',
+    color: '#64748b',
+    layout: 'simple',
+    labels: [],
+    lists: [],
+  },
+  {
     id: 'homeboard',
     name: 'Homeboard',
     description: 'House projects: rooms as lists, projects as cards, materials as checklists.',

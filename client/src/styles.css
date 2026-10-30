@@ -762,3 +762,26 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 @media (max-width: 700px) { .board-search { min-width: 140px; } .keys-pop { display: none; } }
 .check-row { display: flex; align-items: center; gap: 8px; text-transform: capitalize; }
 .drawer.wide-drawer { width: min(560px, 100%); }
+
+/* Simple layout: plain checkbox rows */
+.list.simple .list-head { cursor: default; gap: 2px; padding: 6px 6px 6px 4px; border-bottom: 1px solid var(--border, rgba(127,127,127,.2)); }
+.list.simple .drag-handle { cursor: grab; color: var(--muted); padding: 0 4px; user-select: none; touch-action: none; }
+.list.simple .chevron { color: var(--muted); }
+.list.simple .list-name { flex: 1; font-weight: 700; }
+.list.simple .list-count { margin: 0 4px; }
+.simple-card { display: flex; align-items: center; gap: 8px; padding: 8px 6px 8px 10px; }
+.simple-card .card-title { flex: 1; }
+.simple-card.completed .card-title { text-decoration: line-through; opacity: .6; }
+.simple-card input[type=checkbox] { margin: 0; width: 16px; height: 16px; }
+.simple-add { padding: 8px; border-top: 1px solid var(--border, rgba(127,127,127,.2)); }
+.simple-add input, .simple-add-btn { width: 100%; box-sizing: border-box; }
+
+.simple-card { align-items: flex-start; }
+.simple-card > input[type=checkbox] { margin-top: 3px; }
+.simple-body { flex: 1; min-width: 0; }
+.simple-md { font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
+.simple-md > :first-child { margin-top: 0; }
+.simple-md ul.contains-task-list { list-style: none; padding-left: 2px; margin: 4px 0; }
+.simple-md input[type=checkbox] { margin: 0 6px 0 0; vertical-align: -2px; }
+.simple-add textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+.composer-open.simple-add-list { font-size: 22px; min-width: 44px; }

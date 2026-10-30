@@ -224,6 +224,8 @@ const migrations = [
   `,
   // v9: board backgrounds
   'ALTER TABLE boards ADD COLUMN background TEXT;',
+  // v10: board layout ('simple' = plain checkbox rows)
+  'ALTER TABLE boards ADD COLUMN layout TEXT;',
 ];
 
 function migrate() {

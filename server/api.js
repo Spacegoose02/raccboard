@@ -195,7 +195,8 @@ api.patch('/boards/:id', (req, res) => {
   const board = getBoard(req.params.id, 'owner');
   const b = req.body;
   db.transaction(() => {
-    patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => colorOr(v, null), archived: bool });
+    patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => colorOr(v, null), archived: bool,
+      layout: (v) => (v === 'simple' ? 'simple' : null) });
     if ('background' in b) setBackground(board, cleanBackground(b.background));
     if ('completed' in b) {
       db.prepare('UPDATE boards SET completed_at = ? WHERE id = ?').run(b.completed ? now() : null, board.id);
@@ -352,10 +353,11 @@ api.post('/lists/:id/cards', (req, res) => {
   const list = getList(req.params.id);
   const id = uuid();
   const title = str(req.body.title, 300) || 'New card';
+  const description = typeof req.body.description === 'string' ? req.body.description.slice(0, 100000) : '';
   const t = now();
   db.transaction(() => {
-    db.prepare(`INSERT INTO cards (id, list_id, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(id, list.id, title, nextPos('cards', 'list_id', list.id), t, t);
+    db.prepare(`INSERT INTO cards (id, list_id, title, description, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, list.id, title, description, nextPos('cards', 'list_id', list.id), t, t);
     logActivity(list.board_id, id, req.who, `added this card to ${list.name}`);
   })();
   runAutomations('card_added', { cardId: id, listId: list.id, who: req.who });
