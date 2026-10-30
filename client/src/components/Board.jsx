@@ -96,7 +96,8 @@ export default function Board({ boardId, cardId }) {
     // Live updates arrive over the event stream; the slow poll is a fallback for proxies that block it.
     const timer = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 120000);
     document.addEventListener('visibilitychange', onVisible);
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+    window.addEventListener('rb:synced', load);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('rb:synced', load); };
   }, [load]);
   const [viewers, setViewers] = useState([]);
   useEffect(() => {
