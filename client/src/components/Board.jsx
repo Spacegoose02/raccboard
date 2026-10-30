@@ -7,6 +7,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { api, apiUrl, CLIENT_ID } from '../api.js';
+import { pushUndo } from '../undo.js';
 import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
 import { dueStatus, formatDate, parseDate } from '../dates.js';
@@ -142,8 +143,13 @@ export default function Board({ boardId, cardId }) {
       const act = actions[e.key];
       if (act) { e.preventDefault(); act(); }
     };
+    const COMMANDS = {
+      'new-card': 'n', 'view-board': 'b', 'view-list': 'l', 'view-calendar': 'c', 'filter-mine': 'q', 'filter-clear': 'x',
+    };
+    const onCommand = (e) => { const key = COMMANDS[e.detail]; if (key) onKey({ key, target: document.body, preventDefault() {} }); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('rb:command', onCommand);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('rb:command', onCommand); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardId]);
 
@@ -230,6 +236,13 @@ export default function Board({ boardId, cardId }) {
     try {
       await api.post(`/cards/${drag.id}/move`, { list_id: list, index });
       setData((d) => ({ ...d, cards: d.cards.map((x) => (x.id === drag.id ? { ...x, list_id: list } : x)) }));
+      const { fromList, fromIndex } = drag;
+      const title = cardsById[drag.id]?.title || 'card';
+      pushUndo({
+        label: `Moved "${title}"`,
+        undo: () => api.post(`/cards/${drag.id}/move`, { list_id: fromList, index: fromIndex }).then(load),
+        redo: () => api.post(`/cards/${drag.id}/move`, { list_id: list, index }).then(load),
+      });
     } catch (e) {
       alert(`Could not move card: ${e.message}`);
       load();
@@ -249,7 +262,14 @@ export default function Board({ boardId, cardId }) {
   const patchCardLocal = (id, patch) => setData((d) => ({ ...d, cards: d.cards.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
   const toggleCard = async (card) => {
     patchCardLocal(card.id, { completed: card.completed ? 0 : 1 });
-    try { await api.patch(`/cards/${card.id}`, { completed: !card.completed }); } catch (e) { patchCardLocal(card.id, { completed: card.completed }); alert(e.message); }
+    try {
+      await api.patch(`/cards/${card.id}`, { completed: !card.completed });
+      pushUndo({
+        label: `${card.completed ? 'Reopened' : 'Completed'} "${card.title}"`,
+        undo: () => api.patch(`/cards/${card.id}`, { completed: !!card.completed }).then(load),
+        redo: () => api.patch(`/cards/${card.id}`, { completed: !card.completed }).then(load),
+      });
+    } catch (e) { patchCardLocal(card.id, { completed: card.completed }); alert(e.message); }
   };
   const updateList = async (id, patch) => { await api.patch(`/lists/${id}`, patch); load(); };
   const archiveCards = async (list) => {
@@ -265,7 +285,15 @@ export default function Board({ boardId, cardId }) {
   const addList = async (name) => { await api.post(`/boards/${boardId}/lists`, { name }); load(); };
   const renameBoard = async (name) => { await api.patch(`/boards/${boardId}`, { name }); load(); };
   const toggleLayout = async () => { await api.patch(`/boards/${boardId}`, { layout: board.layout === 'simple' ? null : 'simple' }); load(); };
-  const archiveCard = async (card) => { await api.patch(`/cards/${card.id}`, { archived: true }); load(); };
+  const archiveCard = async (card) => {
+    await api.patch(`/cards/${card.id}`, { archived: true });
+    load();
+    pushUndo({
+      label: `Archived "${card.title}"`,
+      undo: () => api.patch(`/cards/${card.id}`, { archived: false }).then(load),
+      redo: () => api.patch(`/cards/${card.id}`, { archived: true }).then(load),
+    });
+  };
   const toggleBoardComplete = async () => { await api.patch(`/boards/${boardId}`, { completed: !board.completed_at }); load(); };
 
   const role = board.my_role;
@@ -444,7 +472,7 @@ function cardMatches(card, f, meId) {
 }
 const SHORTCUTS = [
   ['/', 'Search cards'], ['n', 'Add a card to the first list'], ['q', 'Toggle "My cards"'], ['x', 'Clear filters'],
-  ['b', 'Board view'], ['l', 'List view'], ['c', 'Calendar view'], ['Esc', 'Close card / clear filters'], ['?', 'Show these shortcuts'],
+  ['b', 'Board view'], ['l', 'List view'], ['c', 'Calendar view'], ['Esc', 'Close card / clear filters'], ['Ctrl K', 'Search and commands'], ['Ctrl Z', 'Undo'], ['Ctrl Shift Z', 'Redo'], ['?', 'Show these shortcuts'],
 ];
 
 function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards }) {
