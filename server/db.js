@@ -226,6 +226,24 @@ const migrations = [
   'ALTER TABLE boards ADD COLUMN background TEXT;',
   // v10: board layout ('simple' = plain checkbox rows)
   'ALTER TABLE boards ADD COLUMN layout TEXT;',
+  // v11: notifications inbox (mentions, card assignments, due-date reminders)
+  `
+  CREATE TABLE notifications (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    board_id TEXT REFERENCES boards(id) ON DELETE CASCADE,
+    card_id TEXT REFERENCES cards(id) ON DELETE CASCADE,
+    actor TEXT,
+    text TEXT NOT NULL,
+    dedupe TEXT,
+    read_at TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_notifications_user ON notifications(user_id, created_at);
+  CREATE UNIQUE INDEX idx_notifications_dedupe ON notifications(user_id, dedupe) WHERE dedupe IS NOT NULL;
+  ALTER TABLE users ADD COLUMN notify_email INTEGER NOT NULL DEFAULT 1;
+  `,
 ];
 
 function migrate() {
