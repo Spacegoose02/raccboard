@@ -49,6 +49,7 @@
 ## Phase 2: Accounts and sharing
 
 - [ ] @mentions in comments
+- [x] Live board updates: changes from other people and devices appear instantly, with "who's viewing" rings on avatars
 
 ## Phase 3: Views and dates
 

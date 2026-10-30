@@ -31,7 +31,9 @@ const httpError = (status, message) => Object.assign(new Error(message), { statu
 // viewer and writes need editor. No access at all looks like "not found" so boards don't leak.
 export function assertBoard(boardId, level) {
   const need = level || (currentMethod() === 'GET' ? 'viewer' : 'editor');
+  const req = requestContext.getStore();
   const role = boardRole(boardId, currentUser());
+  req?.touchedBoards?.add(String(boardId));
   if (!role) throw httpError(404, 'Board not found');
   if (RANK[role] < RANK[need]) {
     throw httpError(403, need === 'owner' ? 'Only the board owner can do that' : 'You have view-only access to this board');

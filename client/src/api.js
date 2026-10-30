@@ -14,8 +14,12 @@ export function apiUrl(path) {
   return token ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : url;
 }
 
+// Identifies this tab so live updates skip echoes of its own writes.
+export const CLIENT_ID = Math.random().toString(36).slice(2);
+
 function headers(extra = {}) {
   const token = IS_NATIVE && getSettings().authToken;
+  extra = { ...extra, 'X-Client-Id': CLIENT_ID };
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
 }
 
