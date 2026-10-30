@@ -1,0 +1,18 @@
+{
+  // Type-checks JavaScript without a TypeScript rewrite. Files opt in with a `// @ts-check`
+  // first line; `npm run typecheck` runs in CI. Add the comment to more files over time.
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["client/src", "server"]
+}

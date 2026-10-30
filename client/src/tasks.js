@@ -1,3 +1,4 @@
+// @ts-check
 // Markdown task lists ("- [ ] item"): count and toggle them in source text, skipping fenced code.
 const TASK = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\])/;
 

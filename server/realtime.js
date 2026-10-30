@@ -1,3 +1,4 @@
+// @ts-check
 import express from 'express';
 import { assertBoard } from './access.js';
 import { publicUser } from './auth.js';

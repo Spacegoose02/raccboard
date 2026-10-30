@@ -1,3 +1,4 @@
+// @ts-check
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { db } from './db.js';
 

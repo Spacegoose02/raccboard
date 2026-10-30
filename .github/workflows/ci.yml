@@ -15,6 +15,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build
       - name: Start server
@@ -28,6 +29,10 @@ jobs:
       - run: npm run smoke:google
       - run: npm run smoke:email
       - run: npm run smoke:cli
+      - name: End-to-end tests
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
       - name: Server log
         if: always()
         run: cat server.log
