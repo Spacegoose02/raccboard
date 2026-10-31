@@ -109,6 +109,7 @@ export function createBoardFrom({ user, who, name, color, templateId, fromBoardI
           .run(id, boardId, f.name, f.type, f.options, f.show_on_card, f.position);
       }
       const listMap = new Map();
+      const cardMap = new Map();
       for (const l of db.prepare('SELECT * FROM lists WHERE board_id = ? AND archived = 0 ORDER BY position').all(src.id)) {
         const id = uuid();
         listMap.set(l.id, id);
@@ -116,12 +117,19 @@ export function createBoardFrom({ user, who, name, color, templateId, fromBoardI
         if (!includeCards) continue;
         for (const c of db.prepare('SELECT c.*, ? AS board_id FROM cards c WHERE list_id = ? AND archived = 0 ORDER BY position').all(src.id, l.id)) {
           const newId = copyCard(c, { id, board_id: boardId }, { keep: { labels: false, members: false, attachments: false }, asTemplate: !!c.is_template });
+          cardMap.set(c.id, newId);
           for (const lid of db.prepare('SELECT label_id FROM card_labels WHERE card_id = ?').pluck().all(c.id)) {
             if (labelMap.has(lid)) db.prepare('INSERT INTO card_labels (card_id, label_id) VALUES (?, ?)').run(newId, labelMap.get(lid));
           }
           for (const v of db.prepare('SELECT field_id, value FROM card_field_values WHERE card_id = ?').all(c.id)) {
             if (fieldMap.has(v.field_id)) db.prepare('INSERT INTO card_field_values (card_id, field_id, value) VALUES (?, ?, ?)').run(newId, fieldMap.get(v.field_id), v.value);
           }
+        }
+      }
+      for (const d of db.prepare(`SELECT d.* FROM card_dependencies d JOIN cards c ON c.id = d.card_id JOIN lists l ON l.id = c.list_id
+          WHERE l.board_id = ?`).all(src.id)) {
+        if (cardMap.has(d.card_id) && cardMap.has(d.blocked_by_id)) {
+          db.prepare('INSERT INTO card_dependencies (card_id, blocked_by_id) VALUES (?, ?)').run(cardMap.get(d.card_id), cardMap.get(d.blocked_by_id));
         }
       }
       for (const r of db.prepare('SELECT * FROM automations WHERE board_id = ?').all(src.id)) {

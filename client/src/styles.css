@@ -835,3 +835,39 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .field-new { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .field-new input { flex: 1 1 160px; }
 .field-badge { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Dependencies */
+.dep-list { list-style: none; margin: 4px 0 8px; padding: 0; }
+.dep-list li { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+.dep-list li.done .link-btn { text-decoration: line-through; opacity: 0.7; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--text-strong); cursor: pointer; text-align: left; font: inherit; }
+.link-btn:hover { text-decoration: underline; }
+.dep-picker input { width: 100%; box-sizing: border-box; }
+.dep-picker ul { list-style: none; margin: 4px 0 8px; padding: 0; }
+.dep-picker li { padding: 3px 0; }
+
+/* Timeline */
+.timeline { padding: 8px 12px 16px; }
+.timeline-scroll { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); max-height: calc(100vh - 190px); }
+.timeline-grid { position: relative; }
+.timeline-head { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--border); }
+.timeline-months, .timeline-days { position: relative; height: 20px; }
+.timeline-months span { position: absolute; top: 2px; font-size: 12px; font-weight: 600; color: var(--text-strong); white-space: nowrap; padding-left: 4px; }
+.timeline-days span { position: absolute; top: 2px; text-align: center; font-size: 11px; opacity: 0.7; }
+.timeline-days span.weekend { opacity: 0.4; }
+.timeline-body { position: relative; }
+.timeline-labels { position: sticky; left: 0; z-index: 1; height: 100%; background: var(--surface); border-right: 1px solid var(--border); }
+.timeline-label { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 8px; background: none; border: 0; border-bottom: 1px solid var(--border); color: var(--text); text-align: left; font: inherit; font-size: 13px; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.timeline-label small { font-size: 10px; opacity: 0.6; }
+.timeline-label:hover { background: var(--btn-hover); }
+.timeline-chart { position: absolute; top: 0; }
+.tl-weekend { fill: rgba(127, 127, 127, 0.08); }
+.tl-today { stroke: #ef4444; stroke-width: 2; stroke-dasharray: 4 3; }
+.tl-bar { cursor: pointer; }
+.tl-bar rect { fill: var(--board-accent, var(--accent)); opacity: 0.9; }
+.tl-bar:hover rect { opacity: 1; stroke: var(--text-strong); stroke-width: 1.5; }
+.tl-bar.done rect { opacity: 0.4; }
+.tl-dep { fill: none; stroke: var(--text); stroke-width: 1.5; opacity: 0.7; }
+.tl-dep.late { stroke: #ef4444; opacity: 1; }
+.tl-arrowhead { fill: var(--text); }
+.timeline-empty { padding: 32px; text-align: center; }

@@ -73,3 +73,29 @@ test('custom fields: add a field in the card, see it on the card face and in Lis
   await expect(page.locator('.card-table th', { hasText: 'Cost' })).toBeVisible();
   await expect(page.locator('.card-table td[data-label="Cost"]').first()).toHaveText('42');
 });
+
+test('dependencies and timeline: blocked badge, bars and arrow', async ({ page, request }) => {
+  const login = await (await request.post('/api/auth/login', { data: { username: USER, password: PASSWORD } })).json();
+  const headers = { Authorization: `Bearer ${login.token}` };
+  const board = await (await request.post('/api/boards', { headers, data: { name: 'Timeline board' } })).json();
+  const list = await (await request.post(`/api/boards/${board.id}/lists`, { headers, data: { name: 'Plan' } })).json();
+  const mk = async (title, start_date, due_date) => {
+    const c = await (await request.post(`/api/lists/${list.id}/cards`, { headers, data: { title } })).json();
+    await request.patch(`/api/cards/${c.id}`, { headers, data: { start_date, due_date } });
+    return c;
+  };
+  const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const design = await mk('Design', day(0), day(2));
+  const build = await mk('Build', day(3), day(6));
+  await request.put(`/api/cards/${build.id}/blockers/${design.id}`, { headers });
+
+  await signIn(page);
+  await page.goto(`/#/b/${board.id}`);
+  await expect(page.locator('.card', { hasText: 'Build' }).getByText('⛔ Blocked')).toBeVisible();
+  await page.keyboard.press('t');
+  await expect(page.locator('.tl-bar')).toHaveCount(2);
+  await expect(page.locator('.tl-dep')).toHaveCount(1);
+  await page.locator('.timeline').screenshot({ path: 'test-results/timeline.png' });
+  await page.locator('.timeline-label', { hasText: 'Build' }).click();
+  await expect(page.locator('.dependencies')).toContainText('Design');
+});

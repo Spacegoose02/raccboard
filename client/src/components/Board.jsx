@@ -21,12 +21,14 @@ const CardModal = lazy(() => import('./CardModal.jsx'));
 const SimpleMarkdown = lazy(() => import('./SimpleMarkdown.jsx'));
 const ListView = lazy(() => import('./ListView.jsx'));
 const CalendarView = lazy(() => import('./CalendarView.jsx'));
+const TimelineView = lazy(() => import('./TimelineView.jsx'));
 const Automations = lazy(() => import('./Automations.jsx'));
 
 const VIEWS = [
   { id: 'board', label: '▥ Board' },
   { id: 'list', label: '☰ List' },
   { id: 'calendar', label: '📅 Calendar' },
+  { id: 'timeline', label: '▤ Timeline' },
 ];
 const viewKey = (boardId) => `rackboard.view.${boardId}`;
 const savedView = (boardId) => { try { return localStorage.getItem(viewKey(boardId)) || 'board'; } catch { return 'board'; } };
@@ -142,6 +144,7 @@ export default function Board({ boardId, cardId }) {
         b: () => setView('board'),
         l: () => setView('list'),
         c: () => setView('calendar'),
+        t: () => setView('timeline'),
         n: () => document.querySelector('.list .composer-open')?.click(),
         '?': () => setShowKeys((s) => !s),
         Escape: () => { setShowKeys(false); setFilter(NO_FILTER); },
@@ -150,7 +153,7 @@ export default function Board({ boardId, cardId }) {
       if (act) { e.preventDefault(); act(); }
     };
     const COMMANDS = {
-      'new-card': 'n', 'view-board': 'b', 'view-list': 'l', 'view-calendar': 'c', 'filter-mine': 'q', 'filter-clear': 'x',
+      'new-card': 'n', 'view-board': 'b', 'view-list': 'l', 'view-calendar': 'c', 'view-timeline': 't', 'filter-mine': 'q', 'filter-clear': 'x',
     };
     const onCommand = (e) => { const key = COMMANDS[e.detail]; if (key) onKey({ key, target: document.body, preventDefault() {} }); };
     window.addEventListener('keydown', onKey);
@@ -394,6 +397,7 @@ export default function Board({ boardId, cardId }) {
 
       <Suspense fallback={<p className="muted loading-view">Loading…</p>}>
         {view === 'list' && <ListView data={data} cards={data.cards.filter(shows)} ctx={ctx} />}
+        {view === 'timeline' && <TimelineView data={data} cards={data.cards.filter(shows)} ctx={ctx} />}
         {view === 'calendar' && <CalendarView boardId={boardId} keep={keepEvent} canEdit={canEdit} onChanged={load} />}
       </Suspense>
       {view === 'board' && <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
@@ -438,6 +442,7 @@ export default function Board({ boardId, cardId }) {
           labels={data.labels}
           people={data.people}
           lists={data.lists}
+          boardCards={data.cards}
           onChanged={load}
           onClose={() => navigate(`/b/${boardId}`)}
         />
@@ -478,7 +483,7 @@ function cardMatches(card, f, meId) {
 }
 const SHORTCUTS = [
   ['/', 'Search cards'], ['n', 'Add a card to the first list'], ['q', 'Toggle "My cards"'], ['x', 'Clear filters'],
-  ['b', 'Board view'], ['l', 'List view'], ['c', 'Calendar view'], ['Esc', 'Close card / clear filters'], ['Ctrl K', 'Search and commands'], ['Ctrl Z', 'Undo'], ['Ctrl Shift Z', 'Redo'], ['?', 'Show these shortcuts'],
+  ['b', 'Board view'], ['l', 'List view'], ['c', 'Calendar view'], ['t', 'Timeline view'], ['Esc', 'Close card / clear filters'], ['Ctrl K', 'Search and commands'], ['Ctrl Z', 'Undo'], ['Ctrl Shift Z', 'Redo'], ['?', 'Show these shortcuts'],
 ];
 
 function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards }) {
@@ -663,6 +668,9 @@ function CardFace({ card, ctx, overlay }) {
           <span className="card-members">
             {card.member_ids.map((id) => ctx.peopleById[id] && <Avatar key={id} user={ctx.peopleById[id]} size={22} />)}
           </span>
+        )}
+        {!card.completed && card.blocked_by?.some((id) => ctx.cardsById[id] && !ctx.cardsById[id].completed) && (
+          <span className="badge overdue" title="Waiting on another card">⛔ Blocked</span>
         )}
         {ctx.fields.filter((f) => f.show_on_card).map((f) => {
           const text = fieldText(f, card.field_values?.[f.id]);

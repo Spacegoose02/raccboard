@@ -173,6 +173,7 @@ api.get('/boards/:id', (req, res) => {
       (SELECT COUNT(*) FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id WHERE cl.card_id = c.id AND i.done = 1) AS check_done,
       (SELECT json_group_array(label_id) FROM card_labels WHERE card_id = c.id) AS label_ids,
       (SELECT json_group_array(user_id) FROM card_members WHERE card_id = c.id) AS member_ids,
+      (SELECT json_group_array(blocked_by_id) FROM card_dependencies WHERE card_id = c.id) AS blocked_by,
       (SELECT MIN(d) FROM (
         SELECT i.due_date AS d FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id
           WHERE cl.card_id = c.id AND i.done = 0 AND i.due_date IS NOT NULL
@@ -182,7 +183,7 @@ api.get('/boards/:id', (req, res) => {
     FROM cards c JOIN lists l ON l.id = c.list_id
     WHERE l.board_id = ? AND l.archived = 0 AND c.archived = 0
     ORDER BY c.position`).all(board.id)
-    .map((c) => ({ ...c, label_ids: JSON.parse(c.label_ids), member_ids: JSON.parse(c.member_ids) }));
+    .map((c) => ({ ...c, label_ids: JSON.parse(c.label_ids), member_ids: JSON.parse(c.member_ids), blocked_by: JSON.parse(c.blocked_by) }));
   const labels = db.prepare('SELECT * FROM labels WHERE board_id = ? ORDER BY rowid').all(board.id);
   const people = boardUsers(board.id).map((u) => publicUser(u, req.user));
   const fields = boardFields(board.id);
@@ -406,8 +407,11 @@ api.get('/cards/:id', (req, res) => {
   const attachments = db.prepare('SELECT * FROM attachments WHERE card_id = ? ORDER BY created_at DESC').all(card.id);
   const comments = db.prepare('SELECT * FROM comments WHERE card_id = ? ORDER BY created_at DESC').all(card.id);
   const activity = db.prepare('SELECT * FROM activity WHERE card_id = ? ORDER BY created_at DESC LIMIT 200').all(card.id);
+  const depCards = (sql) => db.prepare(`SELECT c.id, c.title, c.completed FROM card_dependencies d JOIN cards c ON c.id = ${sql}`).all(card.id);
+  const blocked_by = depCards('d.blocked_by_id WHERE d.card_id = ?');
+  const blocking = depCards('d.card_id WHERE d.blocked_by_id = ?');
   const field_values = Object.fromEntries(db.prepare('SELECT field_id, value FROM card_field_values WHERE card_id = ?').all(card.id).map((v) => [v.field_id, v.value]));
-  res.json({ card: { ...card, list_name: list.name, label_ids, member_ids, field_values, my_role: boardRole(card.board_id, req.user) }, checklists, attachments, comments, activity, fields: boardFields(card.board_id) });
+  res.json({ card: { ...card, list_name: list.name, label_ids, member_ids, field_values, blocked_by, blocking, my_role: boardRole(card.board_id, req.user) }, checklists, attachments, comments, activity, fields: boardFields(card.board_id) });
 });
 
 api.patch('/cards/:id', (req, res) => {
@@ -710,6 +714,40 @@ api.put('/cards/:id/fields/:fieldId', (req, res) => {
       ON CONFLICT (card_id, field_id) DO UPDATE SET value = excluded.value`).run(card.id, field.id, value);
   touchCard(card.id);
   res.json({ field_id: field.id, value });
+});
+
+/* ---------- Dependencies ---------- */
+
+// "This card is blocked by that card" (same board). Refuses links that would make a loop.
+function wouldCycle(cardId, blockerId) {
+  const seen = new Set();
+  const next = db.prepare('SELECT blocked_by_id FROM card_dependencies WHERE card_id = ?').pluck();
+  const stack = [blockerId];
+  while (stack.length) {
+    const id = stack.pop();
+    if (id === cardId) return true;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    stack.push(...next.all(id));
+  }
+  return false;
+}
+
+api.put('/cards/:id/blockers/:blockerId', (req, res) => {
+  const card = getCard(req.params.id);
+  const blocker = getCard(req.params.blockerId, 'viewer');
+  if (blocker.board_id !== card.board_id) throw new HttpError(400, 'Dependencies must be on the same board');
+  if (blocker.id === card.id || wouldCycle(card.id, blocker.id)) throw new HttpError(400, 'That would make a loop of cards blocking each other');
+  const r = db.prepare('INSERT OR IGNORE INTO card_dependencies (card_id, blocked_by_id) VALUES (?, ?)').run(card.id, blocker.id);
+  if (r.changes) logActivity(card.board_id, card.id, req.who, `marked this card as blocked by "${blocker.title}"`);
+  res.status(204).end();
+});
+
+api.delete('/cards/:id/blockers/:blockerId', (req, res) => {
+  const card = getCard(req.params.id);
+  const r = db.prepare('DELETE FROM card_dependencies WHERE card_id = ? AND blocked_by_id = ?').run(card.id, String(req.params.blockerId));
+  if (r.changes) logActivity(card.board_id, card.id, req.who, 'removed a blocker');
+  res.status(204).end();
 });
 
 /* ---------- Comments ---------- */
