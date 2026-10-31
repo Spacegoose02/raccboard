@@ -50,3 +50,26 @@ test('command palette finds a card and opens it', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/c\//);
 });
+
+test('custom fields: add a field in the card, see it on the card face and in List view', async ({ page }) => {
+  await signIn(page);
+  await page.keyboard.press('Control+k');
+  await page.locator('.palette input').fill('e2e tests');
+  await page.locator('.palette-list li', { hasText: 'Write e2e tests' }).click();
+  await expect(page.locator('.modal')).toBeVisible();
+
+  await page.locator('.custom-fields').getByRole('button', { name: '+ Field' }).click();
+  await page.getByPlaceholder('Field name, e.g. Cost').fill('Cost');
+  await page.locator('.field-new select').selectOption('number');
+  await page.getByRole('button', { name: 'Add field' }).click();
+  const input = page.locator('.field-row', { hasText: 'Cost' }).locator('input');
+  await input.fill('42');
+  await input.press('Enter');
+  await expect(page.locator('.field-row', { hasText: 'Cost' }).locator('input')).toHaveValue('42');
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.card', { hasText: 'Write e2e tests' }).locator('.field-badge')).toHaveText('Cost: 42');
+  await page.getByRole('tab', { name: /List/ }).click();
+  await expect(page.locator('.card-table th', { hasText: 'Cost' })).toBeVisible();
+  await expect(page.locator('.card-table td[data-label="Cost"]').first()).toHaveText('42');
+});

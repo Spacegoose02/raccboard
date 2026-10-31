@@ -823,3 +823,15 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .palette-snippet { display: block; font-style: normal; font-size: 12px; opacity: 0.65; }
 .backup-list { list-style: none; padding: 0; margin: 12px 0 0; }
 .backup-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
+
+/* Custom fields */
+.field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.field-row { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.field-row input:not([type=checkbox]), .field-row select { width: 100%; box-sizing: border-box; }
+.field-row input[type=checkbox] { width: 18px; height: 18px; }
+.field-name { display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: var(--text-strong); }
+.field-tools { display: inline-flex; gap: 2px; opacity: 0.6; }
+.field-tools .icon-btn { font-size: 11px; padding: 0 4px; }
+.field-new { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.field-new input { flex: 1 1 160px; }
+.field-badge { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

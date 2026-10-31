@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CardFields } from './CustomFields.jsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api, apiUrl } from '../api.js';
@@ -44,7 +45,7 @@ export default function CardModal({ cardId, labels, people = [], lists = [], onC
   }
   if (!detail) return <div className="modal-backdrop"><div className="modal small"><p className="muted">Loading…</p></div></div>;
 
-  const { card, checklists, attachments, comments, activity } = detail;
+  const { card, checklists, attachments, comments, activity, fields = [] } = detail;
   const patchCard = (body) => run(() => api.patch(`/cards/${card.id}`, body));
   const cardLabels = labels.filter((l) => card.label_ids.includes(l.id));
   const due = dueStatus(card.due_date, card.completed);
@@ -176,6 +177,8 @@ export default function CardModal({ cardId, labels, people = [], lists = [], onC
             )}
 
             <Description value={card.description} onSave={(description) => patchCard({ description })} readOnly={!canEdit} />
+
+            <CardFields card={card} fields={fields} run={run} readOnly={!canEdit} />
 
             {attachments.length > 0 && (
               <section className="section">

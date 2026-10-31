@@ -42,6 +42,7 @@ export function copyCard(src, targetList, { title, keep = {}, who, asTemplate = 
     }
     // Labels and members belong to a board, so they only carry over within it.
     if (k.labels && sameBoard) db.prepare('INSERT INTO card_labels (card_id, label_id) SELECT ?, label_id FROM card_labels WHERE card_id = ?').run(id, src.id);
+    if (sameBoard) db.prepare('INSERT INTO card_field_values (card_id, field_id, value) SELECT ?, field_id, value FROM card_field_values WHERE card_id = ?').run(id, src.id);
     if (k.members && sameBoard) db.prepare('INSERT INTO card_members (card_id, user_id) SELECT ?, user_id FROM card_members WHERE card_id = ?').run(id, src.id);
     if (k.attachments) {
       for (const a of db.prepare('SELECT * FROM attachments WHERE card_id = ?').all(src.id)) {
@@ -100,6 +101,13 @@ export function createBoardFrom({ user, who, name, color, templateId, fromBoardI
         labelMap.set(l.id, id);
         db.prepare('INSERT INTO labels (id, board_id, name, color) VALUES (?, ?, ?, ?)').run(id, boardId, l.name, l.color);
       }
+      const fieldMap = new Map();
+      for (const f of db.prepare('SELECT * FROM board_fields WHERE board_id = ?').all(src.id)) {
+        const id = uuid();
+        fieldMap.set(f.id, id);
+        db.prepare('INSERT INTO board_fields (id, board_id, name, type, options, show_on_card, position) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(id, boardId, f.name, f.type, f.options, f.show_on_card, f.position);
+      }
       const listMap = new Map();
       for (const l of db.prepare('SELECT * FROM lists WHERE board_id = ? AND archived = 0 ORDER BY position').all(src.id)) {
         const id = uuid();
@@ -110,6 +118,9 @@ export function createBoardFrom({ user, who, name, color, templateId, fromBoardI
           const newId = copyCard(c, { id, board_id: boardId }, { keep: { labels: false, members: false, attachments: false }, asTemplate: !!c.is_template });
           for (const lid of db.prepare('SELECT label_id FROM card_labels WHERE card_id = ?').pluck().all(c.id)) {
             if (labelMap.has(lid)) db.prepare('INSERT INTO card_labels (card_id, label_id) VALUES (?, ?)').run(newId, labelMap.get(lid));
+          }
+          for (const v of db.prepare('SELECT field_id, value FROM card_field_values WHERE card_id = ?').all(c.id)) {
+            if (fieldMap.has(v.field_id)) db.prepare('INSERT INTO card_field_values (card_id, field_id, value) VALUES (?, ?, ?)').run(newId, fieldMap.get(v.field_id), v.value);
           }
         }
       }

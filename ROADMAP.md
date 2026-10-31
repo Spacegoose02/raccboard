@@ -50,6 +50,7 @@
 
 - [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email
 - [x] Live board updates: changes from other people and devices appear instantly, with "who's viewing" rings on avatars
+- [x] Custom fields per board (text, number, date, dropdown, checkbox): set them in the card, see them on card fronts and as sortable List view columns
 - [x] Automatic database backups (Settings → Backups: back up now, download) and full-text search across card titles, descriptions and comments
 - [x] Speed: big boards load ~100x faster (database indexes), gzip for the app and API, smaller first download, offscreen cards skip rendering
 - [x] Vitest unit tests, Playwright end-to-end tests and JSDoc type checking (`npm run typecheck`) in CI

@@ -185,7 +185,14 @@ api.get('/boards/:id', (req, res) => {
     .map((c) => ({ ...c, label_ids: JSON.parse(c.label_ids), member_ids: JSON.parse(c.member_ids) }));
   const labels = db.prepare('SELECT * FROM labels WHERE board_id = ? ORDER BY rowid').all(board.id);
   const people = boardUsers(board.id).map((u) => publicUser(u, req.user));
-  res.json({ board: { ...board, my_role: boardRole(board.id, req.user) }, lists, cards, labels, people });
+  const fields = boardFields(board.id);
+  const values = {};
+  for (const v of db.prepare(`SELECT v.card_id, v.field_id, v.value FROM card_field_values v
+      JOIN board_fields f ON f.id = v.field_id WHERE f.board_id = ?`).all(board.id)) {
+    (values[v.card_id] ||= {})[v.field_id] = v.value;
+  }
+  for (const c of cards) c.field_values = values[c.id] || {};
+  res.json({ board: { ...board, my_role: boardRole(board.id, req.user) }, lists, cards, labels, people, fields });
 });
 
 /* ---------- Dates (calendar) ---------- */
@@ -399,7 +406,8 @@ api.get('/cards/:id', (req, res) => {
   const attachments = db.prepare('SELECT * FROM attachments WHERE card_id = ? ORDER BY created_at DESC').all(card.id);
   const comments = db.prepare('SELECT * FROM comments WHERE card_id = ? ORDER BY created_at DESC').all(card.id);
   const activity = db.prepare('SELECT * FROM activity WHERE card_id = ? ORDER BY created_at DESC LIMIT 200').all(card.id);
-  res.json({ card: { ...card, list_name: list.name, label_ids, member_ids, my_role: boardRole(card.board_id, req.user) }, checklists, attachments, comments, activity });
+  const field_values = Object.fromEntries(db.prepare('SELECT field_id, value FROM card_field_values WHERE card_id = ?').all(card.id).map((v) => [v.field_id, v.value]));
+  res.json({ card: { ...card, list_name: list.name, label_ids, member_ids, field_values, my_role: boardRole(card.board_id, req.user) }, checklists, attachments, comments, activity, fields: boardFields(card.board_id) });
 });
 
 api.patch('/cards/:id', (req, res) => {
@@ -634,6 +642,74 @@ api.delete('/attachments/:id', (req, res) => {
   removeUpload(a.stored_name);
   logActivity(a.board_id, a.card_id, req.who, `removed attachment ${a.filename}`);
   res.status(204).end();
+});
+
+/* ---------- Custom fields ---------- */
+
+// Per-board fields. Values are stored as text: numbers as digits, dates as YYYY-MM-DD, checkboxes
+// as "1", selects as the chosen option. Editors manage fields; an empty value clears it.
+const FIELD_TYPES = ['text', 'number', 'date', 'select', 'checkbox'];
+const boardFields = (boardId) => db.prepare('SELECT * FROM board_fields WHERE board_id = ? ORDER BY position, rowid').all(boardId)
+  .map((f) => ({ ...f, options: JSON.parse(f.options), show_on_card: !!f.show_on_card }));
+const getField = (id, level) => guard(db.prepare('SELECT * FROM board_fields WHERE id = ?').get(id), 'Field', level);
+const cleanOptions = (v) => (Array.isArray(v) ? [...new Set(v.map((o) => str(o, 60)).filter(Boolean))].slice(0, 50) : []);
+
+function cleanFieldValue(field, v) {
+  if (v === null || v === undefined || v === '' || v === false) return null;
+  switch (field.type) {
+    case 'number': { const n = Number(v); if (!Number.isFinite(n)) throw new HttpError(400, `${field.name} must be a number`); return String(n); }
+    case 'date': return dateOrNull(v);
+    case 'checkbox': return v ? '1' : null;
+    case 'select': {
+      const o = str(String(v), 60);
+      if (!JSON.parse(field.options).includes(o)) throw new HttpError(400, `"${o}" is not an option for ${field.name}`);
+      return o;
+    }
+    default: return str(String(v), 1000) || null;
+  }
+}
+
+api.post('/boards/:id/fields', (req, res) => {
+  const board = getBoard(req.params.id, 'editor');
+  const name = str(req.body.name, 60);
+  if (!name) throw new HttpError(400, 'Field name is required');
+  const type = FIELD_TYPES.includes(req.body.type) ? req.body.type : 'text';
+  const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 FROM board_fields WHERE board_id = ?').pluck().get(board.id);
+  const id = uuid();
+  db.prepare('INSERT INTO board_fields (id, board_id, name, type, options, show_on_card, position) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, board.id, name, type, JSON.stringify(type === 'select' ? cleanOptions(req.body.options) : []), req.body.show_on_card === false ? 0 : 1, position);
+  logActivity(board.id, null, req.who, `added the field "${name}"`);
+  res.status(201).json(boardFields(board.id).find((f) => f.id === id));
+});
+
+api.patch('/fields/:id', (req, res) => {
+  const field = getField(req.params.id, 'editor');
+  patch('board_fields', field.id, req.body, {
+    name: (v) => str(v, 60) || field.name,
+    options: (v) => JSON.stringify(field.type === 'select' ? cleanOptions(v) : []),
+    show_on_card: (v) => (v ? 1 : 0),
+    position: (v) => (Number.isInteger(v) ? v : field.position),
+  });
+  res.json(boardFields(field.board_id).find((f) => f.id === field.id));
+});
+
+api.delete('/fields/:id', (req, res) => {
+  const field = getField(req.params.id, 'editor');
+  db.prepare('DELETE FROM board_fields WHERE id = ?').run(field.id);
+  logActivity(field.board_id, null, req.who, `removed the field "${field.name}"`);
+  res.status(204).end();
+});
+
+api.put('/cards/:id/fields/:fieldId', (req, res) => {
+  const card = getCard(req.params.id);
+  const field = getField(req.params.fieldId);
+  if (field.board_id !== card.board_id) throw new HttpError(400, 'That field belongs to another board');
+  const value = cleanFieldValue(field, req.body.value);
+  if (value === null) db.prepare('DELETE FROM card_field_values WHERE card_id = ? AND field_id = ?').run(card.id, field.id);
+  else db.prepare(`INSERT INTO card_field_values (card_id, field_id, value) VALUES (?, ?, ?)
+      ON CONFLICT (card_id, field_id) DO UPDATE SET value = excluded.value`).run(card.id, field.id, value);
+  touchCard(card.id);
+  res.json({ field_id: field.id, value });
 });
 
 /* ---------- Comments ---------- */
