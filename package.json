@@ -32,7 +32,8 @@
     "smoke:search": "node scripts/smoke-search-backups.js",
     "smoke:fields": "node scripts/smoke-fields.js",
     "smoke:dependencies": "node scripts/smoke-dependencies.js",
-    "smoke:recurring": "node scripts/smoke-recurring.js"
+    "smoke:recurring": "node scripts/smoke-recurring.js",
+    "smoke:integrations": "node scripts/smoke-integrations.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

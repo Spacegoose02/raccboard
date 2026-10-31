@@ -1,5 +1,6 @@
 // @ts-check
 import express from 'express';
+import { fireWebhooks } from './integrations.js';
 import { assertBoard } from './access.js';
 import { publicUser } from './auth.js';
 
@@ -51,7 +52,10 @@ export function broadcastWrites(req, res, next) {
   req.touchedBoards = new Set();
   res.on('finish', () => {
     if (res.statusCode >= 400) return;
-    for (const id of req.touchedBoards) send(id, 'change', { by: req.user?.id }, req.get('X-Client-Id'));
+    for (const id of req.touchedBoards) {
+      send(id, 'change', { by: req.user?.id }, req.get('X-Client-Id'));
+      fireWebhooks(id, req);
+    }
   });
   next();
 }
