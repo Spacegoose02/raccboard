@@ -304,6 +304,10 @@ const migrations = [
     PRIMARY KEY (card_id, blocked_by_id)
   );
   CREATE INDEX idx_card_dependencies_blocker ON card_dependencies(blocked_by_id);
+  `,  // v16: repeating cards and per-list WIP limits
+  `
+  ALTER TABLE cards ADD COLUMN recurrence TEXT;
+  ALTER TABLE lists ADD COLUMN wip_limit INTEGER;
   `,
 ];
 

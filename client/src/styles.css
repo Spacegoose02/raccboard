@@ -871,3 +871,7 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .tl-dep.late { stroke: #ef4444; opacity: 1; }
 .tl-arrowhead { fill: var(--text); }
 .timeline-empty { padding: 32px; text-align: center; }
+
+.list-count { cursor: pointer; }
+.list-count.over-wip { background: #e5484d; color: #fff; border-radius: 8px; padding: 0 6px; }
+.repeat-select { padding: 4px 6px; border-radius: 6px; }

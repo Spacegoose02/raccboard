@@ -14,7 +14,7 @@ import { sameOriginWrites } from './security.js';
 import { notificationsRouter, notify, notifyMentions } from './notifications.js';
 import { backupsRouter } from './backups.js';
 import { realtimeRouter, broadcastWrites } from './realtime.js';
-import { featuresRouter, runAutomations, createBoardFrom } from './features.js';
+import { featuresRouter, runAutomations, createBoardFrom, copyCard } from './features.js';
 
 export const api = express.Router();
 // The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
@@ -356,6 +356,7 @@ api.patch('/lists/:id', (req, res) => {
   const list = getList(req.params.id);
   patch('lists', list.id, req.body, {
     name: (v) => str(v, 120) || list.name, due_date: dateOrNull, collapsed: bool, archived: bool,
+    wip_limit: (v) => (Number.isInteger(v) && v > 0 ? Math.min(v, 999) : null),
   });
   if ('archived' in req.body) {
     logActivity(list.board_id, null, req.who, `${req.body.archived ? 'archived' : 'restored'} list "${list.name}"`);
@@ -423,6 +424,7 @@ api.patch('/cards/:id', (req, res) => {
       description: (v) => (typeof v === 'string' ? v.slice(0, 100000) : ''),
       start_date: dateOrNull, due_date: dateOrNull, completed: bool, archived: bool, is_template: bool,
       cover: (v) => cleanCover(v, card.id),
+      recurrence: (v) => (RECURRENCES.includes(v) ? v : null),
     });
     touchCard(card.id);
     const log = (t) => logActivity(card.board_id, card.id, req.who, t);
@@ -441,9 +443,12 @@ api.patch('/cards/:id', (req, res) => {
     if ('description' in b && b.description !== card.description) log('updated the description');
     if ('due_date' in b && dateOrNull(b.due_date) !== card.due_date) log(b.due_date ? `set the due date to ${b.due_date}` : 'removed the due date');
     if ('start_date' in b && dateOrNull(b.start_date) !== card.start_date) log(b.start_date ? `set the start date to ${b.start_date}` : 'removed the start date');
+    if ('recurrence' in b && (b.recurrence || null) !== card.recurrence) log(b.recurrence ? `set this card to repeat ${b.recurrence}` : 'stopped this card repeating');
   })();
+  let next = null;
+  if ('completed' in b && b.completed && !card.completed) next = repeatCard(getCard(card.id), req.who);
   if ('completed' in b && b.completed && !card.completed) runAutomations('card_completed', { cardId: card.id, who: req.who });
-  res.json(getCard(card.id));
+  res.json({ ...getCard(card.id), next_card_id: next });
 });
 
 // Covers are 'color:<css color>' or 'image:<attachment id on this card>'.
@@ -715,6 +720,38 @@ api.put('/cards/:id/fields/:fieldId', (req, res) => {
   touchCard(card.id);
   res.json({ field_id: field.id, value });
 });
+
+/* ---------- Repeating cards ---------- */
+
+// Completing a repeating card makes the next one: a fresh copy in the same spot with its dates
+// moved forward one period (copyCard already unticks checklists). The finished card stops repeating.
+const RECURRENCES = ['daily', 'weekly', 'monthly'];
+export function shiftDate(v, recurrence) {
+  if (!v) return v;
+  const [y, m, d] = v.slice(0, 10).split('-').map(Number);
+  let date;
+  if (recurrence === 'monthly') {
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); // last day of next month
+    date = new Date(Date.UTC(y, m, Math.min(d, last)));
+  } else {
+    date = new Date(Date.UTC(y, m - 1, d + (recurrence === 'weekly' ? 7 : 1)));
+  }
+  return date.toISOString().slice(0, 10) + v.slice(10);
+}
+
+function repeatCard(card, who) {
+  if (!RECURRENCES.includes(card.recurrence)) return null;
+  const list = getList(card.list_id);
+  const index = db.prepare('SELECT COUNT(*) FROM cards WHERE list_id = ? AND archived = 0 AND position < ?').pluck().get(list.id, card.position);
+  const id = copyCard(card, list, { who, index });
+  db.transaction(() => {
+    db.prepare('UPDATE cards SET recurrence = ?, completed = 0, start_date = ?, due_date = ? WHERE id = ?')
+      .run(card.recurrence, shiftDate(card.start_date, card.recurrence), shiftDate(card.due_date, card.recurrence), id);
+    db.prepare('UPDATE cards SET recurrence = NULL WHERE id = ?').run(card.id);
+  })();
+  logActivity(card.board_id, id, who, `created the next ${card.recurrence} repeat of this card`);
+  return id;
+}
 
 /* ---------- Dependencies ---------- */
 

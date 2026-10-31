@@ -272,11 +272,18 @@ export default function Board({ boardId, cardId }) {
   const toggleCard = async (card) => {
     patchCardLocal(card.id, { completed: card.completed ? 0 : 1 });
     try {
-      await api.patch(`/cards/${card.id}`, { completed: !card.completed });
+      const res = await api.patch(`/cards/${card.id}`, { completed: !card.completed });
+      let next = res?.next_card_id;
+      if (next) load(); // a repeating card made its next copy
       pushUndo({
-        label: `${card.completed ? 'Reopened' : 'Completed'} "${card.title}"`,
-        undo: () => api.patch(`/cards/${card.id}`, { completed: !!card.completed }).then(load),
-        redo: () => api.patch(`/cards/${card.id}`, { completed: !card.completed }).then(load),
+        label: `${card.completed ? 'Reopened' : 'Completed'} "${card.title}"${next ? ' (next repeat added)' : ''}`,
+        // Undoing a repeat completion also removes the copy it made and restores the repeat.
+        undo: async () => {
+          if (next) { await api.del(`/cards/${next}`); next = null; }
+          await api.patch(`/cards/${card.id}`, { completed: !!card.completed, ...(card.recurrence ? { recurrence: card.recurrence } : {}) });
+          load();
+        },
+        redo: async () => { next = (await api.patch(`/cards/${card.id}`, { completed: !card.completed }))?.next_card_id; load(); },
       });
     } catch (e) { patchCardLocal(card.id, { completed: card.completed }); alert(e.message); }
   };
@@ -513,7 +520,16 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards })
     <div ref={setNodeRef} style={style} className={`list ${isDragging ? 'dragging' : ''}`} data-list-id={list.id}>
       <div className="list-head" {...attributes} {...listeners}>
         <InlineEdit value={list.name} onSave={(name) => onUpdate(list.id, { name })} className="list-name" readOnly={!ctx.canEdit} />
-        <span className="list-count">{cardIds.length}</span>
+        <span
+          className={`list-count${list.wip_limit && cardIds.length > list.wip_limit ? ' over-wip' : ''}`}
+          title={ctx.canEdit ? 'Click to set a WIP limit' : list.wip_limit ? `WIP limit ${list.wip_limit}` : undefined}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => {
+            if (!ctx.canEdit) return;
+            const v = window.prompt('WIP limit for this list (blank for none)', list.wip_limit || '');
+            if (v !== null) onUpdate(list.id, { wip_limit: v.trim() ? Number(v) : null });
+          }}
+        >{list.wip_limit ? `${cardIds.length}/${list.wip_limit}` : cardIds.length}</span>
         <button className="icon-btn" title="Collapse list" onPointerDown={(e) => e.stopPropagation()} onClick={() => collapse(true)}>⇤</button>
         {ctx.canEdit && <>
         <button className="icon-btn" title="Archive list" aria-label="Archive list" onPointerDown={(e) => e.stopPropagation()} onClick={() => onUpdate(list.id, { archived: true })}>🗃</button>
@@ -669,6 +685,7 @@ function CardFace({ card, ctx, overlay }) {
             {card.member_ids.map((id) => ctx.peopleById[id] && <Avatar key={id} user={ctx.peopleById[id]} size={22} />)}
           </span>
         )}
+        {card.recurrence && <span className="badge plain" title={`Repeats ${card.recurrence}`}>🔁</span>}
         {!card.completed && card.blocked_by?.some((id) => ctx.cardsById[id] && !ctx.cardsById[id].completed) && (
           <span className="badge overdue" title="Waiting on another card">⛔ Blocked</span>
         )}

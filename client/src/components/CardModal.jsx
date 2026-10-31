@@ -174,6 +174,18 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
                     {card.due_date && <AddToCalendar card={card} />}
                   </div>
                 )}
+                {(card.start_date || card.due_date) && (canEdit || card.recurrence) && (
+                  <div className="meta">
+                    <h5>Repeat</h5>
+                    <select className="repeat-select" value={card.recurrence || ''} disabled={!canEdit} title="When this card is completed, a copy is made with its dates moved forward"
+                      onChange={(e) => patchCard({ recurrence: e.target.value || null })}>
+                      <option value="">Doesn't repeat</option>
+                      <option value="daily">🔁 Daily</option>
+                      <option value="weekly">🔁 Weekly</option>
+                      <option value="monthly">🔁 Monthly</option>
+                    </select>
+                  </div>
+                )}
               </div>
             )}
 
