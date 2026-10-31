@@ -46,6 +46,14 @@
 - [x] Bug fixes: 30-day sign-out, vanishing restored cards, start-date-only cards on calendars, team owners
 - [x] Trello favorites: card covers, search and filters, keyboard shortcuts, copy card, card and board templates (incl. Homeboard), automation rules, Trello import
 
+## v1.3.0 (unreleased)
+
+- [x] Board backgrounds (presets, colors, links, uploads with metadata stripped) and the Simple list template
+- [x] Live board updates, notifications inbox with @mentions and due-date reminders, Ctrl+K command palette, undo/redo, offline mode
+- [x] Custom fields, card dependencies and Timeline view, recurring cards and WIP limits
+- [x] Full-text search, automatic backups, public API tokens and webhooks, optional AI helpers
+- [x] Big-board speedups (~100x), gzip, Vitest/Playwright/type checking in CI
+
 ## Phase 2: Accounts and sharing
 
 - [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email
