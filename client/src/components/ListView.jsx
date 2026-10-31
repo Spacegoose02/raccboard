@@ -3,6 +3,7 @@ import { navigate } from '../router.js';
 import { dueStatus, formatDate } from '../dates.js';
 import { Avatar } from './Avatar.jsx';
 import { CompleteCircle } from './ui.jsx';
+import { fieldSortKey, fieldText } from './CustomFields.jsx';
 
 const COLUMNS = [
   { id: 'title', label: 'Card' },
@@ -22,9 +23,13 @@ export default function ListView({ data, cards, ctx }) {
   const listOrder = useMemo(() => Object.fromEntries(data.lists.map((l, i) => [l.id, i])), [data.lists]);
   const listName = useMemo(() => Object.fromEntries(data.lists.map((l) => [l.id, l.name])), [data.lists]);
 
+  const fields = data.fields || [];
+  const columns = useMemo(() => [...COLUMNS, ...fields.map((f) => ({ id: `f:${f.id}`, label: f.name, field: f }))], [fields]);
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const key = {
+    const field = fields.find((f) => `f:${f.id}` === sort.by);
+    const key = field ? (c) => fieldSortKey(field, c.field_values?.[field.id]) : {
       title: (c) => c.title.toLowerCase(),
       list: (c) => listOrder[c.list_id] * 1e6 + c.position,
       start: (c) => c.start_date || '~',
@@ -39,7 +44,7 @@ export default function ListView({ data, cards, ctx }) {
         const y = key(b);
         return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
       });
-  }, [cards, query, hideDone, sort, listOrder]);
+  }, [cards, query, hideDone, sort, listOrder, fields]);
 
   const header = (col) => {
     if (col.sortable === false) return <th key={col.id}>{col.label}</th>;
@@ -61,7 +66,7 @@ export default function ListView({ data, cards, ctx }) {
         <span className="muted small">{rows.length} card{rows.length === 1 ? '' : 's'}</span>
       </div>
       <table className="card-table">
-        <thead><tr><th className="col-done" aria-label="Done" />{COLUMNS.map(header)}</tr></thead>
+        <thead><tr><th className="col-done" aria-label="Done" />{columns.map(header)}</tr></thead>
         <tbody>
           {rows.map((c) => {
             const due = dueStatus(c.due_date, c.completed);
@@ -88,6 +93,7 @@ export default function ListView({ data, cards, ctx }) {
                     </span>
                   )}
                 </td>
+                {fields.map((f) => <td key={f.id} data-label={f.name}>{fieldText(f, c.field_values?.[f.id])}</td>)}
               </tr>
             );
           })}

@@ -277,6 +277,25 @@ const migrations = [
   CREATE TRIGGER cards_fts_comment_delete AFTER DELETE ON comments BEGIN
     UPDATE cards_fts SET comments = COALESCE((SELECT group_concat(body, ' ') FROM comments WHERE card_id = old.card_id), '') WHERE card_id = old.card_id;
   END;
+  `,  // v14: custom fields per board (text, number, date, select, checkbox) and their values on cards
+  `
+  CREATE TABLE board_fields (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    options TEXT NOT NULL DEFAULT '[]',
+    show_on_card INTEGER NOT NULL DEFAULT 1,
+    position INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX idx_board_fields_board ON board_fields(board_id, position);
+  CREATE TABLE card_field_values (
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    field_id TEXT NOT NULL REFERENCES board_fields(id) ON DELETE CASCADE,
+    value TEXT NOT NULL,
+    PRIMARY KEY (card_id, field_id)
+  );
+  CREATE INDEX idx_card_field_values_field ON card_field_values(field_id);
   `,
 ];
 

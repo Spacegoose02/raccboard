@@ -8,6 +8,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { api, apiUrl, CLIENT_ID } from '../api.js';
 import { pushUndo } from '../undo.js';
+import { fieldText } from './CustomFields.jsx';
 import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
 import { dueStatus, formatDate, parseDate } from '../dates.js';
@@ -314,7 +315,7 @@ export default function Board({ boardId, cardId }) {
     load();
   };
   // Dragging is off for viewers, and while filtering (hidden cards would make positions ambiguous).
-  const ctx = { cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
+  const ctx = { fields: data.fields || [], cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
     simple: board.layout === 'simple', archiveCard, setDescription };
 
   return (
@@ -663,6 +664,10 @@ function CardFace({ card, ctx, overlay }) {
             {card.member_ids.map((id) => ctx.peopleById[id] && <Avatar key={id} user={ctx.peopleById[id]} size={22} />)}
           </span>
         )}
+        {ctx.fields.filter((f) => f.show_on_card).map((f) => {
+          const text = fieldText(f, card.field_values?.[f.id]);
+          return text && <span key={f.id} className="badge plain field-badge" title={f.name}>{f.type === 'checkbox' ? text : `${f.name}: ${text}`}</span>;
+        })}
         {card.next_sub_due && !card.completed && (
           <span className={`badge ${dueStatus(card.next_sub_due, false) || 'plain'}`} title="Next checklist due date">☑🕑 {formatDate(card.next_sub_due)}</span>
         )}
