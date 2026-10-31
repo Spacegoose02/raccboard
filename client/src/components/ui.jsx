@@ -38,8 +38,8 @@ export function Menu({ items, label = '⋯', className = '' }) {
       <button className="icon-btn" aria-label="Menu" onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>{label}</button>
       {open && (
         <div className="menu-list" onClick={(e) => e.stopPropagation()}>
-          {items.filter(Boolean).map((it) => (
-            <button key={it.label} className={it.danger ? 'danger' : ''} onClick={() => { setOpen(false); it.onClick(); }}>
+          {items.filter(Boolean).map((it, i) => (
+            <button key={i} className={it.danger ? 'danger' : ''} onClick={() => { setOpen(false); it.onClick(); }}>
               {it.label}
             </button>
           ))}
@@ -94,8 +94,9 @@ export function Composer({ placeholder, buttonLabel, onAdd, openLabel, className
   const submit = async () => {
     const v = text.trim();
     if (!v) return;
-    setText('');
-    await onAdd(v);
+    // Clear only once it is saved, so a failed add (offline, server error) keeps what was typed.
+    try { await onAdd(v); } catch (e) { alert(e.message); return; }
+    setText((t) => (t.trim() === v ? '' : t));
     if (!keepOpen) setOpen(false);
   };
   const Tag = multiline ? 'textarea' : 'input';

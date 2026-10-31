@@ -34,6 +34,42 @@ export const pendingCount = () => loadQueue().length;
 
 export function enqueue(method, path, body) {
   saveQueue([...loadQueue(), { method, path, body, at: Date.now() }]);
+  applyToCache(method, path, body || {});
+}
+
+// Mirror a queued edit into the cached boards, so the board doesn't snap back to its old state
+// when it reloads from the cache while offline.
+const flag = (v) => (typeof v === 'boolean' ? (v ? 1 : 0) : v);
+function applyToCache(method, path, body) {
+  const m = path.match(/^\/(boards|lists|cards)\/([^/]+)(\/move)?$/);
+  if (!m) return;
+  const [, kind, id, move] = m;
+  for (const key of Object.keys(localStorage)) {
+    if (!/^rb-cache:\/boards\/[^/]+$/.test(key)) continue;
+    const data = readCache(key.slice(CACHE_PREFIX.length));
+    if (!data?.board) continue;
+    let changed = false;
+    const patch = (obj) => { changed = true; return { ...obj, ...Object.fromEntries(Object.entries(body).map(([k, v]) => [k, flag(v)])) }; };
+    if (kind === 'boards' && data.board.id === id && method === 'PATCH') data.board = patch(data.board);
+    if (kind === 'lists' && data.lists.some((l) => l.id === id)) {
+      if (method === 'DELETE' || (method === 'PATCH' && body.archived)) { data.lists = data.lists.filter((l) => l.id !== id); changed = true; }
+      else if (method === 'PATCH') data.lists = data.lists.map((l) => (l.id === id ? patch(l) : l));
+    }
+    if (kind === 'cards' && data.cards.some((c) => c.id === id)) {
+      if (method === 'DELETE' || (method === 'PATCH' && body.archived)) { data.cards = data.cards.filter((c) => c.id !== id); changed = true; }
+      else if (move && method === 'POST') {
+        const card = { ...data.cards.find((c) => c.id === id), list_id: body.list_id };
+        const rest = data.cards.filter((c) => c.id !== id);
+        const inList = rest.filter((c) => c.list_id === body.list_id);
+        const before = inList[body.index];
+        const at = before ? rest.indexOf(before) : rest.length;
+        rest.splice(at, 0, card);
+        data.cards = rest;
+        changed = true;
+      } else if (method === 'PATCH') data.cards = data.cards.map((c) => (c.id === id ? patch(c) : c));
+    }
+    if (changed) writeCache(key.slice(CACHE_PREFIX.length), data);
+  }
 }
 
 // send(method, path, body) performs the real request; it throws { offline: true } on network errors.
@@ -42,6 +78,7 @@ export async function flushQueue(send) {
   if (flushing) return;
   flushing = true;
   let sent = 0;
+  const failed = [];
   try {
     for (let q = loadQueue(); q.length; q = loadQueue()) {
       const [item] = q;
@@ -50,6 +87,7 @@ export async function flushQueue(send) {
       } catch (e) {
         if (e.offline || e.status === 401) return; // still offline or signed out: try again later
         console.warn(`Dropped offline change ${item.method} ${item.path}: ${e.message}`);
+        failed.push(e.message);
       }
       saveQueue(loadQueue().slice(1));
       sent += 1;
@@ -57,5 +95,10 @@ export async function flushQueue(send) {
   } finally {
     flushing = false;
     if (sent) window.dispatchEvent(new Event('rb:synced'));
+    // Tell the person instead of losing their edit quietly.
+    if (failed.length) {
+      const label = `${failed.length} offline change${failed.length === 1 ? '' : 's'} couldn't be saved: ${failed[0]}`;
+      window.dispatchEvent(new CustomEvent('rb:undo', { detail: { label, kind: 'error' } }));
+    }
   }
 }

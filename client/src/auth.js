@@ -1,4 +1,5 @@
-import { clearOffline, writeCache } from './offline.js';
+import { clearOffline, pendingCount, writeCache } from './offline.js';
+import { clearUndo } from './undo.js';
 import { useSyncExternalStore } from 'react';
 import { api } from './api.js';
 import { getSettings, updateSettings } from './settings.js';
@@ -42,9 +43,12 @@ export const requestReset = (username) => api.post('/auth/forgot', { username })
 export const resetPassword = async (token, password) => accept(await api.post('/auth/reset', { token, password }));
 
 export async function signOut() {
+  const n = pendingCount();
+  if (n && !confirm(`${n} change${n === 1 ? '' : 's'} made offline ${n === 1 ? 'has' : 'have'} not synced yet and will be lost. Sign out anyway?`)) return;
   try { await api.post('/auth/logout'); } catch { /* already gone */ }
   updateSettings({ authToken: '' });
   clearOffline(); // cached boards and unsent edits belong to the signed-out account
+  clearUndo();
   set({ user: null, users: [] });
 }
 

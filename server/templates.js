@@ -22,7 +22,7 @@ export const BOARD_TEMPLATES = [
   {
     id: 'simple',
     name: 'Simple list',
-    description: 'Starts empty: add your own sections with +, and simple Markdown cards with checkboxes.',
+    description: 'A plain checklist: sections of items you tick off. Nothing else to set up.',
     color: '#64748b',
     layout: 'simple',
     labels: [],
