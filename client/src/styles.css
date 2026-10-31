@@ -879,3 +879,4 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .integration-block .row { display: flex; gap: 8px; margin: 8px 0; }
 .integration-block .row input { flex: 1; }
 .secret-once code { user-select: all; word-break: break-all; }
+.ai-summary { white-space: pre-wrap; line-height: 1.5; }

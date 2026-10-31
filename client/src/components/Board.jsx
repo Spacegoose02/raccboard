@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAiEnabled } from '../ai.js';
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, pointerWithin, rectIntersection, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -22,6 +23,7 @@ const SimpleMarkdown = lazy(() => import('./SimpleMarkdown.jsx'));
 const ListView = lazy(() => import('./ListView.jsx'));
 const CalendarView = lazy(() => import('./CalendarView.jsx'));
 const TimelineView = lazy(() => import('./TimelineView.jsx'));
+const BoardSummary = lazy(() => import('./BoardSummary.jsx'));
 const Automations = lazy(() => import('./Automations.jsx'));
 
 const VIEWS = [
@@ -48,6 +50,8 @@ export default function Board({ boardId, cardId }) {
   const [active, setActive] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const aiOn = useAiEnabled();
   const [showRules, setShowRules] = useState(false);
   // Phone list pager: which list is in view, and jumping to one.
   const listsRef = useRef(null);
@@ -348,6 +352,7 @@ export default function Board({ boardId, cardId }) {
           })}
           {data.people.length > 6 && <span className="more-people">+{data.people.length - 6}</span>}
         </div>
+        {aiOn && <button className="btn subtle wide-only" onClick={() => setShowSummary(true)} title="AI summary of this board">✨ Summary</button>}
         <button className="btn subtle" onClick={() => setShowShare(true)}>👪 {isOwner ? 'Share' : 'Members'}</button>
         {isOwner && <button className="btn subtle wide-only" onClick={() => setShowBg(true)}>🖼 Background</button>}
         {isOwner && <a className="btn subtle wide-only" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>}
@@ -455,6 +460,7 @@ export default function Board({ boardId, cardId }) {
         />
         </Suspense>
       )}
+      {showSummary && <Suspense fallback={null}><BoardSummary boardId={boardId} onClose={() => setShowSummary(false)} /></Suspense>}
       {showShare && <ShareDialog boardId={boardId} onClose={() => setShowShare(false)} onChanged={load} />}
       {showRules && (
         <div className="drawer-backdrop" onClick={() => { setShowRules(false); load(); }}>

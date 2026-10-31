@@ -71,6 +71,9 @@ Open http://localhost:3000. One process serves both the built client and the API
 | `ALLOW_SIGNUP`  | `false`  | Let anyone create an account from the sign-in page |
 | `TRUST_PROXY`   | (unset)  | Set to `true` behind a reverse proxy so HTTPS is detected (secure cookies) |
 | `PUBLIC_URL`    | (unset)  | Public base URL, e.g. `https://kanban.example.com` (used for the OIDC callback) |
+| `ANTHROPIC_API_KEY` | (unset) | Turns on the optional AI helpers (✨ Suggest steps on cards, ✨ Summary on boards). Card and board text is sent to Anthropic when someone uses them |
+| `AI_MODEL`      | `claude-opus-5-5` | Claude model the AI helpers use |
+| `AI_HOURLY_LIMIT` | `60`   | AI requests each user may make per hour |
 
 See [Accounts and sign-in](#accounts-and-sign-in) for the `OIDC_*` variables.
 
