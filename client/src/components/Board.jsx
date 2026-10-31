@@ -8,7 +8,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { api, apiUrl, CLIENT_ID } from '../api.js';
-import { pushUndo } from '../undo.js';
+import { clearUndo, pushUndo } from '../undo.js';
 import { fieldText } from './CustomFields.jsx';
 import { APP_NAME } from '../config.js';
 import { navigate } from '../router.js';
@@ -18,8 +18,6 @@ import { BackgroundPicker } from './BackgroundPicker.jsx';
 import { Avatar } from './Avatar.jsx';
 import { ShareDialog } from './Share.jsx';
 const CardModal = lazy(() => import('./CardModal.jsx'));
-// Markdown rendering is ~150 KB, so it loads only when a board shows card bodies.
-const SimpleMarkdown = lazy(() => import('./SimpleMarkdown.jsx'));
 const ListView = lazy(() => import('./ListView.jsx'));
 const CalendarView = lazy(() => import('./CalendarView.jsx'));
 const TimelineView = lazy(() => import('./TimelineView.jsx'));
@@ -97,9 +95,11 @@ export default function Board({ boardId, cardId }) {
     }
   }, [boardId]);
   useEffect(() => { load(); }, [load]);
+  // Ctrl+Z only undoes things done on this board.
+  useEffect(() => { clearUndo(); }, [boardId]);
   // Warm the lazy chunks once the board is up, so the service worker has them for offline use.
   useEffect(() => {
-    const warm = () => { import('./SimpleMarkdown.jsx'); import('./CardModal.jsx'); };
+    const warm = () => { import('./CardModal.jsx'); };
     const id = 'requestIdleCallback' in window ? window.requestIdleCallback(warm) : setTimeout(warm, 1500);
     return () => ('cancelIdleCallback' in window ? window.cancelIdleCallback(id) : clearTimeout(id));
   }, []);
@@ -291,22 +291,28 @@ export default function Board({ boardId, cardId }) {
       });
     } catch (e) { patchCardLocal(card.id, { completed: card.completed }); alert(e.message); }
   };
-  const updateList = async (id, patch) => { await api.patch(`/lists/${id}`, patch); load(); };
-  const archiveCards = async (list) => {
-    if (!confirm(`Archive all cards in "${list.name}"? You can restore them from Archived items.`)) return;
-    await api.post(`/lists/${list.id}/archive-cards`);
+  // Run an edit; on failure say so and reload, instead of failing silently.
+  const attempt = async (fn) => {
+    try { await fn(); } catch (e) { alert(e.message); }
     load();
   };
+  const updateList = (id, patch) => attempt(() => api.patch(`/lists/${id}`, patch));
+  const archiveCards = async (list) => {
+    if (!confirm(`Archive all cards in "${list.name}"? You can restore them from Archived items.`)) return;
+    await attempt(() => api.post(`/lists/${list.id}/archive-cards`));
+  };
+  // Adds throw on failure so the composer keeps what was typed.
   const addCard = async (listId, title, description) => { await api.post(`/lists/${listId}/cards`, { title, description }); load(); };
-  const setDescription = async (card, description) => {
-    patchCardLocal(card.id, { description });
-    try { await api.patch(`/cards/${card.id}`, { description }); } catch (e) { patchCardLocal(card.id, { description: card.description }); alert(e.message); }
+  // Simple layout: one item per line.
+  const addItems = async (listId, text) => {
+    for (const line of text.split('\n').map((l) => l.trim()).filter(Boolean)) await api.post(`/lists/${listId}/cards`, { title: line });
+    load();
   };
   const addList = async (name) => { await api.post(`/boards/${boardId}/lists`, { name }); load(); };
-  const renameBoard = async (name) => { await api.patch(`/boards/${boardId}`, { name }); load(); };
-  const toggleLayout = async () => { await api.patch(`/boards/${boardId}`, { layout: board.layout === 'simple' ? null : 'simple' }); load(); };
+  const renameBoard = (name) => attempt(() => api.patch(`/boards/${boardId}`, { name }));
+  const toggleLayout = () => attempt(() => api.patch(`/boards/${boardId}`, { layout: board.layout === 'simple' ? null : 'simple' }));
   const archiveCard = async (card) => {
-    await api.patch(`/cards/${card.id}`, { archived: true });
+    try { await api.patch(`/cards/${card.id}`, { archived: true }); } catch (e) { alert(e.message); load(); return; }
     load();
     pushUndo({
       label: `Archived "${card.title}"`,
@@ -314,7 +320,7 @@ export default function Board({ boardId, cardId }) {
       redo: () => api.patch(`/cards/${card.id}`, { archived: true }).then(load),
     });
   };
-  const toggleBoardComplete = async () => { await api.patch(`/boards/${boardId}`, { completed: !board.completed_at }); load(); };
+  const toggleBoardComplete = () => attempt(() => api.patch(`/boards/${boardId}`, { completed: !board.completed_at }));
 
   const role = board.my_role;
   const canEdit = role === 'editor' || role === 'owner';
@@ -329,8 +335,8 @@ export default function Board({ boardId, cardId }) {
     load();
   };
   // Dragging is off for viewers, and while filtering (hidden cards would make positions ambiguous).
-  const ctx = { fields: data.fields || [], cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
-    simple: board.layout === 'simple', archiveCard, setDescription };
+  const ctx = { addItems, fields: data.fields || [], cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
+    simple: board.layout === 'simple', archiveCard };
 
   return (
     <div className={`board ${ctx.simple ? 'simple-layout' : ''} ${board.background ? 'has-bg' : ''}`} style={{ '--board-accent': board.color || 'var(--accent)', ...backgroundStyle(board) }}>
@@ -358,7 +364,7 @@ export default function Board({ boardId, cardId }) {
         {isOwner && <a className="btn subtle wide-only" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowRules(true)} title="Automation rules">⚡ Automation</button>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowArchived(true)}>🗃 Archived items</button>}
-        {isOwner && <button className="btn subtle wide-only" onClick={toggleLayout} title="Switch how cards look on this board">{board.layout === 'simple' ? '▤ Detailed cards' : '☐ Simple cards'}</button>}
+        {isOwner && <button className="btn subtle wide-only" onClick={toggleLayout} title="Switch how cards look on this board">{board.layout === 'simple' ? '▤ Card view' : '☑ Checklist view'}</button>}
         {isOwner && <button className="btn subtle wide-only" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen board' : '✓ Complete board'}</button>}
         {canEdit && (
           <Menu className="narrow-only" items={[
@@ -366,13 +372,13 @@ export default function Board({ boardId, cardId }) {
             isOwner && { label: '⚙ Board settings', onClick: () => navigate(`/settings/board/${boardId}`) },
             { label: '⚡ Automation', onClick: () => setShowRules(true) },
             { label: '🗃 Archived items', onClick: () => setShowArchived(true) },
-            isOwner && { label: board.layout === 'simple' ? '▤ Detailed cards' : '☐ Simple cards', onClick: toggleLayout },
+            isOwner && { label: board.layout === 'simple' ? '▤ Card view' : '☑ Checklist view', onClick: toggleLayout },
             isOwner && { label: board.completed_at ? '↺ Reopen board' : '✓ Complete board', onClick: toggleBoardComplete },
           ]} />
         )}
       </div>
       <div className="filter-bar">
-        <input ref={searchRef} className="board-search" type="search" placeholder="Search cards…  ( / )" value={filter.text}
+        <input ref={searchRef} className="board-search" type="search" placeholder="Search…" title="Search cards ( / )" value={filter.text}
           onChange={(e) => setFilter((f) => ({ ...f, text: e.target.value }))} aria-label="Search cards" />
         <select className="due-filter" value={filter.due} onChange={(e) => setFilter((f) => ({ ...f, due: e.target.value }))} aria-label="Filter by due date">
           <option value="">Any date</option>
@@ -533,7 +539,10 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards })
           onClick={() => {
             if (!ctx.canEdit) return;
             const v = window.prompt('WIP limit for this list (blank for none)', list.wip_limit || '');
-            if (v !== null) onUpdate(list.id, { wip_limit: v.trim() ? Number(v) : null });
+            if (v === null) return;
+            const n = Number(v.trim());
+            if (v.trim() && !(Number.isInteger(n) && n > 0 && n <= 999)) { alert('Enter a whole number from 1 to 999, or leave it blank for no limit.'); return; }
+            onUpdate(list.id, { wip_limit: v.trim() ? n : null });
           }}
         >{list.wip_limit ? `${cardIds.length}/${list.wip_limit}` : cardIds.length}</span>
         <button className="icon-btn" title="Collapse list" onPointerDown={(e) => e.stopPropagation()} onClick={() => collapse(true)}>⇤</button>
@@ -574,10 +583,10 @@ function SimpleListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCa
   const [text, setText] = useState('');
   const showInput = cardIds.length > 0 || adding;
   const submit = async () => {
-    const [first, ...rest] = text.trim().split('\n');
-    if (!first.trim()) return;
-    setText('');
-    await onAddCard(list.id, first.trim(), rest.join('\n').trim());
+    const v = text.trim();
+    if (!v) return;
+    try { await ctx.addItems(list.id, v); } catch (e) { alert(e.message); return; }
+    setText((t) => (t.trim() === v ? '' : t));
   };
   return (
     <div ref={setNodeRef} style={style} className={`list simple ${isDragging ? 'dragging' : ''}`} data-list-id={list.id}>
@@ -599,14 +608,14 @@ function SimpleListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCa
       {ctx.canEdit && (
         <div className="simple-add">
           {showInput ? (
-            <textarea rows={text.includes('\n') ? Math.min(8, text.split('\n').length) : 1} placeholder="Card title…" title="Enter adds the card. Shift+Enter for more lines of Markdown, e.g. - [ ] task"
+            <textarea rows={text.includes('\n') ? Math.min(8, text.split('\n').length) : 1} placeholder="Add an item…" title="Enter adds the item. Paste several lines to add one item per line."
               value={text} autoFocus={adding} onChange={(e) => setText(e.target.value)}
               onBlur={() => !text && setAdding(false)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
                 if (e.key === 'Escape') { setText(''); setAdding(false); e.target.blur(); }
               }} />
-          ) : <button className="btn simple-add-btn" onClick={() => setAdding(true)}>+Add a card</button>}
+          ) : <button className="btn simple-add-btn" onClick={() => setAdding(true)}>+ Add an item</button>}
         </div>
       )}
     </div>
@@ -639,20 +648,17 @@ function SortableCard({ card, ctx }) {
 function CardFace({ card, ctx, overlay }) {
   if (ctx.simple) {
     return (
-      <div className={`card simple-card ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''}`}
-        onClick={() => !overlay && navigate(`/b/${ctx.boardId}/c/${card.id}`)}>
+      // A plain checklist row: tap it to tick it off; details live behind the ⋮ menu.
+      <label className={`simple-item ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''}`}>
         <input type="checkbox" checked={!!card.completed} disabled={!ctx.canEdit} aria-label={card.completed ? 'Mark incomplete' : 'Mark complete'}
-          onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onChange={() => ctx.toggleCard(card)} />
-        <div className="simple-body">
-          <span className="card-title">{card.title}</span>
-          {card.description && <Suspense fallback={<div className="markdown simple-md">{card.description}</div>}><SimpleMarkdown card={card} ctx={ctx} /></Suspense>}
-        </div>
+          onChange={() => ctx.toggleCard(card)} />
+        <span className="card-title">{card.title}</span>
         {ctx.canEdit && !overlay && <Menu label="⋮" items={[
-          { label: 'Open card', onClick: () => navigate(`/b/${ctx.boardId}/c/${card.id}`) },
+          { label: 'Edit or add notes', onClick: () => navigate(`/b/${ctx.boardId}/c/${card.id}`) },
           { label: card.completed ? 'Mark incomplete' : 'Mark complete', onClick: () => ctx.toggleCard(card) },
-          { label: 'Archive card', onClick: () => ctx.archiveCard(card) },
+          { label: 'Remove item', onClick: () => ctx.archiveCard(card) },
         ]} />}
-      </div>
+      </label>
     );
   }
   const labels = card.label_ids.map((id) => ctx.labelsById[id]).filter(Boolean);

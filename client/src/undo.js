@@ -25,6 +25,8 @@ async function replay(from, to, method, kind) {
     emit({ label: `Couldn't ${kind === 'undid' ? 'undo' : 'redo'}: ${e.message}`, kind: 'error' });
   }
 }
+// Undo history belongs to one board and one account: cleared when either changes.
+export function clearUndo() { done.length = 0; undone.length = 0; }
 export const undo = () => replay(done, undone, 'undo', 'undid');
 export const redo = () => replay(undone, done, 'redo', 'redid');
 

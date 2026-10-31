@@ -21,15 +21,22 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
   const [pop, setPop] = useState(null); // 'labels' | 'dates' | 'checklist' | 'members' | 'cover' | 'copy'
   const { user: me } = useAuth();
   const fileRef = useRef(null);
+  // Unsaved text (description, comment) by section; closing asks before throwing it away.
+  const drafts = useRef({});
+  const setDraftDirty = useCallback((key, dirty) => { drafts.current[key] = dirty; }, []);
+  const requestClose = useCallback(() => {
+    if (Object.values(drafts.current).some(Boolean) && !confirm('You have unsaved text on this card. Close and discard it?')) return;
+    onClose();
+  }, [onClose]);
 
   const load = useCallback(() => api.get(`/cards/${cardId}`).then(setDetail).catch((e) => setError(e.message)), [cardId]);
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') requestClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [requestClose]);
 
   const aiOn = useAiEnabled();
   const [suggesting, setSuggesting] = useState(false);
@@ -71,7 +78,7 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
   const upload = (files) => run(async () => { for (const f of files) await api.upload(`/cards/${card.id}/attachments`, f); });
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
+    <div className="modal-backdrop" onMouseDown={requestClose}>
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); if (canEdit && e.dataTransfer.files.length) upload([...e.dataTransfer.files]); }}>
@@ -83,9 +90,13 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
             { label: '⧉ Copy card', onClick: () => setPop('copy') },
             { label: card.is_template ? '▣ Turn back into a normal card' : '▣ Make this a template', onClick: () => patchCard({ is_template: !card.is_template }) },
             { label: 'Archive card', onClick: async () => { await patchCard({ archived: true }); onClose(); } },
-            { label: 'Delete card', danger: true, onClick: async () => { if (confirm('Delete this card permanently?')) { await api.del(`/cards/${card.id}`); onChanged(); onClose(); } } },
+            { label: 'Delete card', danger: true, onClick: async () => {
+              if (!confirm(`Delete "${card.title}" permanently? This can't be undone. (Archive it instead if you might want it back.)`)) return;
+              try { await api.del(`/cards/${card.id}`); } catch (e) { alert(e.message); return; }
+              onChanged(); onClose();
+            } },
           ]} />}
-          <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
+          <button className="icon-btn" onClick={requestClose} aria-label="Close">✕</button>
         </div>
         {card.archived ? <div className="archived-banner">This card is archived. {canEdit && <button className="btn" onClick={() => patchCard({ archived: false })}>Restore</button>}</div> : null}
 
@@ -203,7 +214,7 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
               </div>
             )}
 
-            <Description value={card.description} onSave={(description) => patchCard({ description })} readOnly={!canEdit} />
+            <Description value={card.description} onSave={(description) => patchCard({ description })} readOnly={!canEdit} onDirty={(d) => setDraftDirty('description', d)} />
 
             <CardFields card={card} fields={fields} run={run} readOnly={!canEdit} />
 
@@ -237,7 +248,7 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
           </div>
 
           <aside className="modal-side">
-            <CommentsAndActivity card={card} comments={comments} activity={activity} run={run} />
+            <CommentsAndActivity card={card} comments={comments} activity={activity} run={run} onDirty={(d) => setDraftDirty('comment', d)} />
           </aside>
         </div>
       </div>
@@ -251,11 +262,12 @@ function formatSize(n) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function Description({ value, onSave, readOnly }) {
+function Description({ value, onSave, readOnly, onDirty }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [tab, setTab] = useState('write');
   useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+  useEffect(() => { onDirty?.(editing && (draft || '') !== (value || '')); }, [editing, draft, value, onDirty]);
   const cancel = () => { setDraft(value); setEditing(false); setTab('write'); };
   if (readOnly) {
     return (
@@ -469,17 +481,20 @@ function ItemDate({ value, onSave }) {
   );
 }
 
-function CommentsAndActivity({ card, comments, activity, run }) {
+function CommentsAndActivity({ card, comments, activity, run, onDirty }) {
   const { user: me } = useAuth();
   const [text, setText] = useState('');
+  useEffect(() => { onDirty?.(!!text.trim()); }, [text, onDirty]);
   const [focused, setFocused] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
-  const submit = () => {
+  const submit = async () => {
     if (!text.trim()) return;
     const body = text;
+    // Keep the comment in the box if it couldn't be posted.
+    try { await api.post(`/cards/${card.id}/comments`, { body }); } catch (e) { alert(e.message); return; }
     setText('');
     setFocused(false);
-    run(() => api.post(`/cards/${card.id}/comments`, { body }));
+    run(async () => {});
   };
   const feed = [
     ...comments.map((c) => ({ ...c, kind: 'comment' })),
