@@ -52,6 +52,7 @@
 - [x] Live board updates: changes from other people and devices appear instantly, with "who's viewing" rings on avatars
 - [x] Card dependencies ("blocked by", with loop protection and a ⛔ Blocked badge) and a Timeline view with dependency arrows (press t)
 - [x] Recurring cards (daily, weekly or monthly; completing one makes the next copy with shifted dates) and per-list WIP limits with an over-limit warning
+- [x] Public API with personal tokens and signed board webhooks (docs/API.md)
 - [x] Custom fields per board (text, number, date, dropdown, checkbox): set them in the card, see them on card fronts and as sortable List view columns
 - [x] Automatic database backups (Settings → Backups: back up now, download) and full-text search across card titles, descriptions and comments
 - [x] Speed: big boards load ~100x faster (database indexes), gzip for the app and API, smaller first download, offscreen cards skip rendering

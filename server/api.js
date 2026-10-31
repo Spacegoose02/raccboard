@@ -13,6 +13,7 @@ import { emailRouter } from './email.js';
 import { sameOriginWrites } from './security.js';
 import { notificationsRouter, notify, notifyMentions } from './notifications.js';
 import { backupsRouter } from './backups.js';
+import { integrationsRouter } from './integrations.js';
 import { realtimeRouter, broadcastWrites } from './realtime.js';
 import { featuresRouter, runAutomations, createBoardFrom, copyCard } from './features.js';
 
@@ -45,6 +46,7 @@ api.use(broadcastWrites);
 api.use(realtimeRouter);
 api.use(notificationsRouter);
 api.use(backupsRouter);
+api.use(integrationsRouter);
 // After any successful change, push dates to connected Google calendars (debounced).
 api.use((req, res, next) => {
   if (req.method !== 'GET') res.on('finish', () => { if (res.statusCode < 400) scheduleGoogleSync(); });

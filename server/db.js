@@ -308,6 +308,28 @@ const migrations = [
   `
   ALTER TABLE cards ADD COLUMN recurrence TEXT;
   ALTER TABLE lists ADD COLUMN wip_limit INTEGER;
+  `,  // v17: personal API tokens and board webhooks
+  `
+  CREATE TABLE api_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    hint TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT
+  );
+  CREATE INDEX idx_api_tokens_user ON api_tokens(user_id);
+  CREATE TABLE webhooks (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    last_status TEXT,
+    last_sent_at TEXT
+  );
+  CREATE INDEX idx_webhooks_board ON webhooks(board_id);
   `,
 ];
 

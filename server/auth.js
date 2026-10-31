@@ -78,7 +78,16 @@ export function publicUser(u, viewer) {
 
 function loadUser(req, res, next) {
   const token = readToken(req);
-  if (token) {
+  if (token?.startsWith('rb_')) {
+    // Personal API token (see server/integrations.js); never expires, revocable in Settings.
+    const row = db.prepare('SELECT t.id AS tid, u.* FROM api_tokens t JOIN users u ON u.id = t.user_id WHERE t.id = ?').get(sha256(token));
+    if (row) {
+      req.user = row;
+      req.apiToken = row.tid;
+      req.who = { name: row.display_name, id: row.id };
+      db.prepare('UPDATE api_tokens SET last_used_at = ? WHERE id = ?').run(now(), row.tid);
+    }
+  } else if (token) {
     const row = db.prepare(`SELECT s.id AS sid, s.expires_at, u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`).get(sha256(token));
     if (row && row.expires_at > now()) {
       req.user = row;
