@@ -9,6 +9,7 @@ import { dueStatus, formatDate, timeAgo } from '../dates.js';
 import { CardCover, ColorPicker, CompleteCircle, Composer, InlineEdit, Menu, Popover } from './ui.jsx';
 import { useAuth, userById } from '../auth.js';
 import { Avatar } from './Avatar.jsx';
+import { useAiEnabled } from '../ai.js';
 import EmailCard from './EmailCard.jsx';
 
 const mdComponents = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" /> };
@@ -29,6 +30,18 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  const aiOn = useAiEnabled();
+  const [suggesting, setSuggesting] = useState(false);
+  const suggestSteps = async () => {
+    setSuggesting(true);
+    await run(async () => {
+      const { items } = await api.get(`/cards/${cardId}/ai/checklist`);
+      const cl = await api.post(`/cards/${cardId}/checklists`, { title: 'Suggested steps' });
+      for (const text of items) await api.post(`/checklists/${cl.id}/items`, { text });
+    });
+    setSuggesting(false);
+  };
 
   // Run a mutation, then refresh the modal and the board behind it.
   const run = async (fn) => {
@@ -94,6 +107,7 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
               <button className="btn" onClick={() => setPop('labels')}>🏷 Labels</button>
               <button className="btn" onClick={() => setPop('dates')}>🕑 Dates</button>
               <button className="btn" onClick={() => setPop('checklist')}>☑ Checklist</button>
+              {aiOn && <button className="btn" disabled={suggesting} onClick={suggestSteps} title="Let AI draft a checklist from this card">{suggesting ? '✨ Thinking…' : '✨ Suggest steps'}</button>}
               <button className="btn" onClick={() => fileRef.current?.click()}>📎 Attachment</button>
               <button className="btn" onClick={() => setPop('cover')}>🖼 Cover</button>
               <input ref={fileRef} type="file" multiple hidden onChange={(e) => { upload([...e.target.files]); e.target.value = ''; }} />

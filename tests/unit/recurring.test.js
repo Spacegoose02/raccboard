@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { shiftDate } from '../../server/api.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { beforeAll, describe, it, expect } from 'vitest';
+
+let shiftDate;
+beforeAll(async () => {
+  process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'rb-unit-'));
+  ({ shiftDate } = await import('../../server/api.js'));
+});
 
 describe('shiftDate', () => {
   it('moves daily and weekly', () => {
