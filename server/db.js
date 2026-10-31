@@ -296,6 +296,14 @@ const migrations = [
     PRIMARY KEY (card_id, field_id)
   );
   CREATE INDEX idx_card_field_values_field ON card_field_values(field_id);
+  `,  // v15: card dependencies ("blocked by")
+  `
+  CREATE TABLE card_dependencies (
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    blocked_by_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    PRIMARY KEY (card_id, blocked_by_id)
+  );
+  CREATE INDEX idx_card_dependencies_blocker ON card_dependencies(blocked_by_id);
   `,
 ];
 

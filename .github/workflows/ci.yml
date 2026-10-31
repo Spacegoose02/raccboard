@@ -27,6 +27,7 @@ jobs:
       - run: npm run smoke:notifications
       - run: npm run smoke:search
       - run: npm run smoke:fields
+      - run: npm run smoke:dependencies
       - run: npm run smoke:oidc
       - run: npm run smoke:google
       - run: npm run smoke:email

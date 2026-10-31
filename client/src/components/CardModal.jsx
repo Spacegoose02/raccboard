@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CardFields } from './CustomFields.jsx';
+import { CardDependencies } from './Dependencies.jsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api, apiUrl } from '../api.js';
@@ -13,7 +14,7 @@ import EmailCard from './EmailCard.jsx';
 const mdComponents = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" /> };
 const Markdown = ({ children }) => <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{children}</ReactMarkdown></div>;
 
-export default function CardModal({ cardId, labels, people = [], lists = [], onChanged, onClose }) {
+export default function CardModal({ cardId, labels, people = [], lists = [], boardCards = [], onChanged, onClose }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
   const [pop, setPop] = useState(null); // 'labels' | 'dates' | 'checklist' | 'members' | 'cover' | 'copy'
@@ -179,6 +180,8 @@ export default function CardModal({ cardId, labels, people = [], lists = [], onC
             <Description value={card.description} onSave={(description) => patchCard({ description })} readOnly={!canEdit} />
 
             <CardFields card={card} fields={fields} run={run} readOnly={!canEdit} />
+
+            <CardDependencies card={card} boardCards={boardCards} run={run} readOnly={!canEdit} />
 
             {attachments.length > 0 && (
               <section className="section">

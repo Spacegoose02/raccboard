@@ -13,7 +13,7 @@ const NAV = [
 ];
 const BOARD_CMDS = [
   ['new-card', 'New card in the first list', 'n'], ['view-board', 'Board view', 'b'], ['view-list', 'List view', 'l'],
-  ['view-calendar', 'Calendar view', 'c'], ['filter-mine', 'Toggle "My cards"', 'q'], ['filter-clear', 'Clear filters', 'x'],
+  ['view-calendar', 'Calendar view', 'c'], ['view-timeline', 'Timeline view', 't'], ['filter-mine', 'Toggle "My cards"', 'q'], ['filter-clear', 'Clear filters', 'x'],
 ].map(([id, label, hint]) => ({ id, label, hint, board: true, run: () => window.dispatchEvent(new CustomEvent('rb:command', { detail: id })) }));
 
 const match = (q, s) => s.toLowerCase().includes(q);
