@@ -303,11 +303,13 @@ export default function Board({ boardId, cardId }) {
   };
   // Adds throw on failure so the composer keeps what was typed.
   const addCard = async (listId, title, description) => { await api.post(`/lists/${listId}/cards`, { title, description }); load(); };
-  // Simple layout: one item per line.
-  const addItems = async (listId, text) => {
-    for (const line of text.split('\n').map((l) => l.trim()).filter(Boolean)) await api.post(`/lists/${listId}/cards`, { title: line });
-    load();
-  };
+  // Simple layout: a box is just its text and pictures, edited in place.
+  const addBox = async (listId, title) => { await api.post(`/lists/${listId}/cards`, { title }); load(); };
+  const setBoxText = (card, title) => attempt(() => api.patch(`/cards/${card.id}`, { title }));
+  const addPictures = (card, files) => attempt(async () => {
+    for (const f of files) if (f.type.startsWith('image/')) await api.upload(`/cards/${card.id}/attachments`, f);
+  });
+  const removePictures = (card) => attempt(async () => { for (const id of card.image_ids) await api.del(`/attachments/${id}`); });
   const addList = async (name) => { await api.post(`/boards/${boardId}/lists`, { name }); load(); };
   const renameBoard = (name) => attempt(() => api.patch(`/boards/${boardId}`, { name }));
   const toggleLayout = () => attempt(() => api.patch(`/boards/${boardId}`, { layout: board.layout === 'simple' ? null : 'simple' }));
@@ -335,7 +337,7 @@ export default function Board({ boardId, cardId }) {
     load();
   };
   // Dragging is off for viewers, and while filtering (hidden cards would make positions ambiguous).
-  const ctx = { addItems, fields: data.fields || [], cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
+  const ctx = { addBox, setBoxText, addPictures, removePictures, fields: data.fields || [], cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
     simple: board.layout === 'simple', archiveCard };
 
   return (
@@ -364,7 +366,7 @@ export default function Board({ boardId, cardId }) {
         {isOwner && <a className="btn subtle wide-only" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowRules(true)} title="Automation rules">⚡ Automation</button>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowArchived(true)}>🗃 Archived items</button>}
-        {isOwner && <button className="btn subtle wide-only" onClick={toggleLayout} title="Switch how cards look on this board">{board.layout === 'simple' ? '▤ Card view' : '☑ Checklist view'}</button>}
+        {isOwner && <button className="btn subtle wide-only" onClick={toggleLayout} title="Switch how cards look on this board">{board.layout === 'simple' ? '▤ Card view' : '☐ Box view'}</button>}
         {isOwner && <button className="btn subtle wide-only" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen board' : '✓ Complete board'}</button>}
         {canEdit && (
           <Menu className="narrow-only" items={[
@@ -372,7 +374,7 @@ export default function Board({ boardId, cardId }) {
             isOwner && { label: '⚙ Board settings', onClick: () => navigate(`/settings/board/${boardId}`) },
             { label: '⚡ Automation', onClick: () => setShowRules(true) },
             { label: '🗃 Archived items', onClick: () => setShowArchived(true) },
-            isOwner && { label: board.layout === 'simple' ? '▤ Card view' : '☑ Checklist view', onClick: toggleLayout },
+            isOwner && { label: board.layout === 'simple' ? '▤ Card view' : '☐ Box view', onClick: toggleLayout },
             isOwner && { label: board.completed_at ? '↺ Reopen board' : '✓ Complete board', onClick: toggleBoardComplete },
           ]} />
         )}
@@ -577,17 +579,9 @@ function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards })
   );
 }
 
-// Simple layout: chevron, drag handle, title, count and menu; an always-open "Card title…" input.
+// Simple layout: chevron, drag handle, title, count and menu; "+Add a card" opens a new box ready to type in.
 function SimpleListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards, collapse, setNodeRef, style, attributes, listeners, isDragging }) {
   const [adding, setAdding] = useState(false);
-  const [text, setText] = useState('');
-  const showInput = cardIds.length > 0 || adding;
-  const submit = async () => {
-    const v = text.trim();
-    if (!v) return;
-    try { await ctx.addItems(list.id, v); } catch (e) { alert(e.message); return; }
-    setText((t) => (t.trim() === v ? '' : t));
-  };
   return (
     <div ref={setNodeRef} style={style} className={`list simple ${isDragging ? 'dragging' : ''}`} data-list-id={list.id}>
       <div className="list-head">
@@ -607,17 +601,79 @@ function SimpleListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCa
       </div>
       {ctx.canEdit && (
         <div className="simple-add">
-          {showInput ? (
-            <textarea rows={text.includes('\n') ? Math.min(8, text.split('\n').length) : 1} placeholder="Add an item…" title="Enter adds the item. Paste several lines to add one item per line."
-              value={text} autoFocus={adding} onChange={(e) => setText(e.target.value)}
-              onBlur={() => !text && setAdding(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
-                if (e.key === 'Escape') { setText(''); setAdding(false); e.target.blur(); }
-              }} />
-          ) : <button className="btn simple-add-btn" onClick={() => setAdding(true)}>+ Add an item</button>}
+          {adding
+            ? <BoxEditor initial="" onSave={async (t) => { if (t) { try { await ctx.addBox(list.id, t); } catch (e) { alert(e.message); return false; } } setAdding(false); }}
+                onCancel={() => setAdding(false)} />
+            : <button className="btn simple-add-btn" onClick={() => setAdding(true)}>+Add a card</button>}
         </div>
       )}
+    </div>
+  );
+}
+
+// Multi-line text box: Enter saves, Shift+Enter adds a line, Escape cancels, clicking away saves.
+function BoxEditor({ initial, onSave, onCancel, onPastePictures }) {
+  const [text, setText] = useState(initial);
+  const done = useRef(false);
+  const save = async () => {
+    if (done.current) return;
+    done.current = true;
+    if ((await onSave(text.trim())) === false) done.current = false;
+  };
+  return (
+    <textarea className="box-editor" autoFocus value={text} placeholder="Type here…" rows={Math.max(2, Math.min(10, text.split('\n').length))}
+      onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+      onFocus={(e) => e.target.setSelectionRange(e.target.value.length, e.target.value.length)}
+      onChange={(e) => setText(e.target.value)} onBlur={save}
+      onPaste={(e) => {
+        const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+        if (files.length && onPastePictures) { e.preventDefault(); onPastePictures(files); }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+        if (e.key === 'Escape') { done.current = true; onCancel(); }
+      }} />
+  );
+}
+
+// A plain box: checkbox, text you edit in place, and pictures you drop or paste onto it.
+function SimpleBox({ card, ctx, overlay }) {
+  const [editing, setEditing] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  const canDrop = ctx.canEdit && !overlay;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  return (
+    <div className={`simple-box ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''} ${dropping ? 'dropping' : ''}`}
+      onDragOver={(e) => { if (canDrop && hasFiles(e)) { e.preventDefault(); setDropping(true); } }}
+      onDragLeave={() => setDropping(false)}
+      onDrop={(e) => {
+        if (!canDrop || !hasFiles(e)) return;
+        e.preventDefault();
+        setDropping(false);
+        ctx.addPictures(card, [...e.dataTransfer.files]);
+      }}>
+      <input type="checkbox" checked={!!card.completed} disabled={!ctx.canEdit} aria-label={card.completed ? 'Mark incomplete' : 'Mark complete'}
+        onPointerDown={(e) => e.stopPropagation()} onChange={() => ctx.toggleCard(card)} />
+      <div className="box-body">
+        {editing
+          ? <BoxEditor initial={card.title} onCancel={() => setEditing(false)} onPastePictures={(files) => ctx.addPictures(card, files)}
+              onSave={async (t) => { setEditing(false); if (t && t !== card.title) await ctx.setBoxText(card, t); }} />
+          : <div className="box-text" onClick={() => ctx.canEdit && !overlay && setEditing(true)}>{card.title}</div>}
+        {card.image_ids?.length > 0 && (
+          <div className="box-pictures">
+            {card.image_ids.map((id) => (
+              <a key={id} href={apiUrl(`/attachments/${id}?inline=1`)} target="_blank" rel="noreferrer noopener" onPointerDown={(e) => e.stopPropagation()}>
+                <img src={apiUrl(`/attachments/${id}?inline=1`)} alt="" loading="lazy" draggable={false} />
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+      {ctx.canEdit && !overlay && <Menu label="⋮" items={[
+        { label: 'Edit text', onClick: () => setEditing(true) },
+        card.image_ids?.length > 0 && { label: 'Remove pictures', onClick: () => confirm('Remove all pictures from this box?') && ctx.removePictures(card) },
+        { label: 'Delete', onClick: () => ctx.archiveCard(card) },
+      ]} />}
     </div>
   );
 }
@@ -646,21 +702,7 @@ function SortableCard({ card, ctx }) {
 }
 
 function CardFace({ card, ctx, overlay }) {
-  if (ctx.simple) {
-    return (
-      // A plain checklist row: tap it to tick it off; details live behind the ⋮ menu.
-      <label className={`simple-item ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''}`}>
-        <input type="checkbox" checked={!!card.completed} disabled={!ctx.canEdit} aria-label={card.completed ? 'Mark incomplete' : 'Mark complete'}
-          onChange={() => ctx.toggleCard(card)} />
-        <span className="card-title">{card.title}</span>
-        {ctx.canEdit && !overlay && <Menu label="⋮" items={[
-          { label: 'Edit or add notes', onClick: () => navigate(`/b/${ctx.boardId}/c/${card.id}`) },
-          { label: card.completed ? 'Mark incomplete' : 'Mark complete', onClick: () => ctx.toggleCard(card) },
-          { label: 'Remove item', onClick: () => ctx.archiveCard(card) },
-        ]} />}
-      </label>
-    );
-  }
+  if (ctx.simple) return <SimpleBox card={card} ctx={ctx} overlay={overlay} />;
   const labels = card.label_ids.map((id) => ctx.labelsById[id]).filter(Boolean);
   const due = dueStatus(card.due_date, card.completed);
   const checkDone = card.check_total > 0 && card.check_done === card.check_total;
