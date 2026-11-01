@@ -79,6 +79,9 @@ const colorOr = (v, fallback) => {
 };
 
 // Build an UPDATE from whitelisted fields present in the body.
+// Simple-layout boxes keep their whole text in the title, so it allows more than a heading would.
+const CARD_TITLE_MAX = 2000;
+
 function patch(table, id, body, fields) {
   const sets = [];
   const vals = [];
@@ -183,11 +186,13 @@ api.get('/boards/:id', (req, res) => {
           WHERE cl.card_id = c.id AND i.done = 0 AND i.due_date IS NOT NULL
         UNION ALL
         SELECT cl.due_date FROM checklists cl WHERE cl.card_id = c.id AND cl.due_date IS NOT NULL
-          AND EXISTS (SELECT 1 FROM checklist_items i WHERE i.checklist_id = cl.id AND i.done = 0))) AS next_sub_due
+          AND EXISTS (SELECT 1 FROM checklist_items i WHERE i.checklist_id = cl.id AND i.done = 0))) AS next_sub_due,
+      (SELECT json_group_array(id) FROM (SELECT id FROM attachments WHERE card_id = c.id
+        AND mime IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp') ORDER BY created_at)) AS image_ids
     FROM cards c JOIN lists l ON l.id = c.list_id
     WHERE l.board_id = ? AND l.archived = 0 AND c.archived = 0
     ORDER BY c.position`).all(board.id)
-    .map((c) => ({ ...c, label_ids: JSON.parse(c.label_ids), member_ids: JSON.parse(c.member_ids), blocked_by: JSON.parse(c.blocked_by) }));
+    .map((c) => ({ ...c, label_ids: JSON.parse(c.label_ids), member_ids: JSON.parse(c.member_ids), blocked_by: JSON.parse(c.blocked_by), image_ids: JSON.parse(c.image_ids) }));
   const labels = db.prepare('SELECT * FROM labels WHERE board_id = ? ORDER BY rowid').all(board.id);
   const people = boardUsers(board.id).map((u) => publicUser(u, req.user));
   const fields = boardFields(board.id);
@@ -389,7 +394,7 @@ api.delete('/lists/:id', (req, res) => {
 api.post('/lists/:id/cards', (req, res) => {
   const list = getList(req.params.id);
   const id = uuid();
-  const title = str(req.body.title, 300) || 'New card';
+  const title = str(req.body.title, CARD_TITLE_MAX) || 'New card';
   const description = typeof req.body.description === 'string' ? req.body.description.slice(0, 100000) : '';
   const t = now();
   db.transaction(() => {
@@ -424,7 +429,7 @@ api.patch('/cards/:id', (req, res) => {
   const b = req.body;
   db.transaction(() => {
     patch('cards', card.id, b, {
-      title: (v) => str(v, 300) || card.title,
+      title: (v) => str(v, CARD_TITLE_MAX) || card.title,
       description: (v) => (typeof v === 'string' ? v.slice(0, 100000) : ''),
       start_date: dateOrNull, due_date: dateOrNull, completed: bool, archived: bool, is_template: bool,
       cover: (v) => cleanCover(v, card.id),
@@ -443,7 +448,7 @@ api.patch('/cards/:id', (req, res) => {
         log(`restored list "${list.name}" with this card`);
       }
     }
-    if ('title' in b && str(b.title) && str(b.title, 300) !== card.title) log(`renamed this card to "${str(b.title, 300)}"`);
+    if ('title' in b && str(b.title) && str(b.title, CARD_TITLE_MAX) !== card.title) log(`renamed this card to "${str(b.title, 300)}"`);
     if ('description' in b && b.description !== card.description) log('updated the description');
     if ('due_date' in b && dateOrNull(b.due_date) !== card.due_date) log(b.due_date ? `set the due date to ${b.due_date}` : 'removed the due date');
     if ('start_date' in b && dateOrNull(b.start_date) !== card.start_date) log(b.start_date ? `set the start date to ${b.start_date}` : 'removed the start date');

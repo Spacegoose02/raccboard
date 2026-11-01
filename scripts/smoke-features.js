@@ -50,6 +50,18 @@ check((await call('GET', `/boards/${simpleCopy.id}`)).board.layout === 'simple',
 await call('PATCH', `/boards/${simpleCopy.id}`, { layout: null });
 check((await call('GET', `/boards/${simpleCopy.id}`)).board.layout === null, 'board layout can be switched back');
 check(full.board.layout === null, 'other templates keep the normal layout');
+const box = await call('POST', `/lists/${sections[0].id}/cards`, { title: 'x'.repeat(1500) });
+check(box.title.length === 1500, 'simple boxes keep long text');
+const boxPng = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='), (ch) => ch.charCodeAt(0));
+const boxForm = new FormData();
+boxForm.append('file', new Blob([boxPng], { type: 'image/png' }), 'pic.png');
+const pic = await (await fetch(`${base}/cards/${box.id}/attachments`, { method: 'POST', body: boxForm, headers: { Authorization: headers.Authorization } })).json();
+const txtForm = new FormData();
+txtForm.append('file', new Blob(['not a picture'], { type: 'text/plain' }), 'note.txt');
+await fetch(`${base}/cards/${box.id}/attachments`, { method: 'POST', body: txtForm, headers: { Authorization: headers.Authorization } });
+const boxOnBoard = (await call('GET', `/boards/${simple.id}`)).cards.find((c) => c.id === box.id);
+check(JSON.stringify(boxOnBoard.image_ids) === JSON.stringify([pic.id]), 'board lists a box\'s pictures (images only)');
+check((await call('GET', `/boards/${simple.id}`)).cards.every((c) => Array.isArray(c.image_ids)), 'every card has an image list');
 await call('DELETE', `/boards/${simple.id}`);
 await call('DELETE', `/boards/${simpleCopy.id}`);
 
