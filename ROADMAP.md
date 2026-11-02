@@ -54,9 +54,13 @@
 - [x] Full-text search, automatic backups, public API tokens and webhooks, optional AI helpers
 - [x] Big-board speedups (~100x), gzip, Vitest/Playwright/type checking in CI
 
-## v1.3.1 (unreleased)
+## v1.3.1 (released 2026-11-01)
 
 - [x] Simple list boards become plain boxes: edit text in place, drop or paste pictures into a box
+
+## v1.3.2 (unreleased)
+
+- [x] Simple list fixes: card menu no longer clipped (Delete reachable), growing text box, selecting text no longer drags the card
 
 ## Phase 2: Accounts and sharing
 
