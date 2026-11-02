@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiUrl } from '../api.js';
 import { BACKGROUNDS } from '../config.js';
 
@@ -33,9 +34,19 @@ export function Popover({ title, onClose, children, className = '' }) {
 export function Menu({ items, label = '⋯', className = '' }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
-  const ref = useDismiss(open, () => setOpen(false));
+  const ref = useRef(null);
   const btnRef = useRef(null);
   const listRef = useRef(null);
+  // Closes on a click outside both the button and the list (the list lives in a portal) or on Escape.
+  useEffect(() => {
+    if (!open) return;
+    const inside = (t) => ref.current?.contains(t) || listRef.current?.contains(t);
+    const onDown = (e) => { if (!inside(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey, true);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey, true); };
+  }, [open]);
   // The list is fixed to the viewport so scrolling or clipped containers (like a card column) can't hide it.
   useLayoutEffect(() => {
     if (!open) { setPos(null); return; }
@@ -58,14 +69,16 @@ export function Menu({ items, label = '⋯', className = '' }) {
   return (
     <div className={`menu ${className}`} ref={ref} onPointerDown={(e) => e.stopPropagation()}>
       <button ref={btnRef} className="icon-btn" aria-label="Menu" onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>{label}</button>
-      {open && (
-        <div className="menu-list" ref={listRef} style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, right: 'auto', zIndex: 1000 }} onClick={(e) => e.stopPropagation()}>
+      {open && createPortal(
+        // Rendered on <body> so no column's stacking context or overflow can cover or clip it.
+        <div className="menu-list" ref={listRef} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, right: 'auto', zIndex: 1000 }} onClick={(e) => e.stopPropagation()}>
           {items.filter(Boolean).map((it, i) => (
             <button key={i} className={it.danger ? 'danger' : ''} onClick={() => { setOpen(false); it.onClick(); }}>
               {it.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

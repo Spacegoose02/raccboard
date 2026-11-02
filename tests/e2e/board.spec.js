@@ -99,3 +99,19 @@ test('dependencies and timeline: blocked badge, bars and arrow', async ({ page, 
   await page.locator('.timeline-label', { hasText: 'Build' }).click();
   await expect(page.locator('.dependencies')).toContainText('Design');
 });
+
+test('simple layout: box menu opens and Delete removes the box', async ({ page, request }) => {
+  await signIn(page);
+  const board = await (await page.request.post('/api/boards', { data: { name: 'Simple e2e' } })).json();
+  await page.request.patch(`/api/boards/${board.id}`, { data: { layout: 'simple' } });
+  const list = await (await page.request.post(`/api/boards/${board.id}/lists`, { data: { name: 'test' } })).json();
+  await page.request.post(`/api/lists/${list.id}/cards`, { data: { title: 'tester' } });
+  await page.goto(`/#/b/${board.id}`);
+  const box = page.locator('.simple-box', { hasText: 'tester' });
+  await expect(box).toBeVisible();
+  await box.locator('.menu .icon-btn').click();
+  const del = page.locator('.menu-list button', { hasText: 'Delete' });
+  await expect(del).toBeVisible();
+  await del.click();
+  await expect(page.locator('.simple-box', { hasText: 'tester' })).toHaveCount(0);
+});
