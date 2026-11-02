@@ -58,9 +58,13 @@
 
 - [x] Simple list boards become plain boxes: edit text in place, drop or paste pictures into a box
 
-## v1.3.2 (unreleased)
+## v1.3.2 (released 2026-11-02)
 
 - [x] Simple list fixes: card menu no longer clipped (Delete reachable), growing text box, selecting text no longer drags the card
+
+## v1.3.3 (unreleased)
+
+- [x] Fix: Simple list ⋮ menu items take clicks again
 
 ## Phase 2: Accounts and sharing
 
