@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useAiEnabled } from '../ai.js';
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, pointerWithin, rectIntersection, useSensor, useSensors,
@@ -615,14 +615,23 @@ function SimpleListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCa
 function BoxEditor({ initial, onSave, onCancel, onPastePictures }) {
   const [text, setText] = useState(initial);
   const done = useRef(false);
+  const ta = useRef(null);
+  // Grow with the text so nothing hides behind a scrollbar.
+  useLayoutEffect(() => {
+    const el = ta.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [text]);
   const save = async () => {
     if (done.current) return;
     done.current = true;
     if ((await onSave(text.trim())) === false) done.current = false;
   };
   return (
-    <textarea className="box-editor" autoFocus value={text} placeholder="Type here…" rows={Math.max(2, Math.min(10, text.split('\n').length))}
-      onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+    <textarea ref={ta} className="box-editor" autoFocus value={text} placeholder="Type here…" rows={2}
+      // Drag sensors listen for mouse/touch/key events, so stop those too or selecting text drags the card.
+      onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
       onFocus={(e) => e.target.setSelectionRange(e.target.value.length, e.target.value.length)}
       onChange={(e) => setText(e.target.value)} onBlur={save}
       onPaste={(e) => {
@@ -630,6 +639,7 @@ function BoxEditor({ initial, onSave, onCancel, onPastePictures }) {
         if (files.length && onPastePictures) { e.preventDefault(); onPastePictures(files); }
       }}
       onKeyDown={(e) => {
+        e.stopPropagation();
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
         if (e.key === 'Escape') { done.current = true; onCancel(); }
       }} />
@@ -672,7 +682,7 @@ function SimpleBox({ card, ctx, overlay }) {
       {ctx.canEdit && !overlay && <Menu label="⋮" items={[
         { label: 'Edit text', onClick: () => setEditing(true) },
         card.image_ids?.length > 0 && { label: 'Remove pictures', onClick: () => confirm('Remove all pictures from this box?') && ctx.removePictures(card) },
-        { label: 'Delete', onClick: () => ctx.archiveCard(card) },
+        { label: 'Delete', danger: true, onClick: () => ctx.archiveCard(card) },
       ]} />}
     </div>
   );

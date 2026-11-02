@@ -882,4 +882,4 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .simple-box .box-pictures img { display: block; max-width: 100%; max-height: 160px; border-radius: 4px; }
 .simple-box .menu { opacity: .5; }
 .simple-box:hover .menu { opacity: 1; }
-.box-editor { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+.box-editor { width: 100%; box-sizing: border-box; resize: none; overflow: hidden; font: inherit; }
