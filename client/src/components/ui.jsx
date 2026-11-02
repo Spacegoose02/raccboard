@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { apiUrl } from '../api.js';
 import { BACKGROUNDS } from '../config.js';
 
@@ -32,12 +32,34 @@ export function Popover({ title, onClose, children, className = '' }) {
 // "⋯" button with a dropdown of actions: [{ label, onClick, danger }]
 export function Menu({ items, label = '⋯', className = '' }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
   const ref = useDismiss(open, () => setOpen(false));
+  const btnRef = useRef(null);
+  const listRef = useRef(null);
+  // The list is fixed to the viewport so scrolling or clipped containers (like a card column) can't hide it.
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const place = () => {
+      const b = btnRef.current?.getBoundingClientRect();
+      const l = listRef.current?.getBoundingClientRect();
+      if (!b) return;
+      const w = l?.width || 180, h = l?.height || 0;
+      const left = Math.max(8, Math.min(b.right - w, window.innerWidth - w - 8));
+      const below = b.bottom + 4;
+      const top = below + h > window.innerHeight - 8 && b.top - h - 4 > 8 ? b.top - h - 4 : below;
+      setPos({ top, left });
+    };
+    place();
+    const close = () => setOpen(false);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => { window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); };
+  }, [open]);
   return (
     <div className={`menu ${className}`} ref={ref} onPointerDown={(e) => e.stopPropagation()}>
-      <button className="icon-btn" aria-label="Menu" onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>{label}</button>
+      <button ref={btnRef} className="icon-btn" aria-label="Menu" onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>{label}</button>
       {open && (
-        <div className="menu-list" onClick={(e) => e.stopPropagation()}>
+        <div className="menu-list" ref={listRef} style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, right: 'auto', zIndex: 1000 }} onClick={(e) => e.stopPropagation()}>
           {items.filter(Boolean).map((it, i) => (
             <button key={i} className={it.danger ? 'danger' : ''} onClick={() => { setOpen(false); it.onClick(); }}>
               {it.label}
