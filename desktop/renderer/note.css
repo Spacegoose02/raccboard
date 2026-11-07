@@ -1,0 +1,25 @@
+:root { --bg: #fff7b1; --bar: #f5e97a; --ink: #3a3420; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; display: flex; flex-direction: column; font: 13px "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); overflow: hidden; }
+header { -webkit-app-region: drag; display: flex; align-items: center; justify-content: space-between; height: 26px; padding: 0 4px 0 10px; background: var(--bar); font-size: 11px; opacity: .85; }
+#list { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tools { -webkit-app-region: no-drag; display: flex; opacity: .35; transition: opacity .15s; }
+body:hover .tools { opacity: 1; }
+.tools button { border: 0; background: none; cursor: pointer; font-size: 12px; padding: 2px 5px; color: var(--ink); border-radius: 4px; }
+.tools button:hover { background: rgba(0,0,0,.08); }
+#top.on { background: rgba(0,0,0,.15); }
+main { flex: 1; overflow: auto; padding: 8px 10px 10px; }
+.titleRow { display: flex; gap: 6px; align-items: flex-start; }
+#title { flex: 1; font-size: 15px; font-weight: 600; outline: none; word-break: break-word; }
+body.completed #title { text-decoration: line-through; opacity: .6; }
+#due { font-size: 11px; margin: 2px 0 6px 22px; opacity: .75; }
+#due.late { color: #b3261e; opacity: 1; font-weight: 600; }
+#desc { width: 100%; min-height: 40px; border: 0; background: transparent; resize: none; font: inherit; color: inherit; outline: none; field-sizing: content; }
+.cl h4 { margin: 8px 0 2px; font-size: 12px; }
+.cl label { display: flex; gap: 6px; align-items: flex-start; padding: 1px 0; cursor: pointer; }
+.cl label.done span { text-decoration: line-through; opacity: .55; }
+.cl .add { width: 100%; border: 0; border-bottom: 1px dashed rgba(0,0,0,.2); background: transparent; font: inherit; color: inherit; padding: 2px 0 2px 20px; outline: none; }
+input[type=checkbox] { accent-color: #6b5d12; margin-top: 2px; }
+#err { color: #b3261e; font-size: 11px; margin: 4px 0 0; }
+::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: rgba(0,0,0,.2); border-radius: 3px; }
