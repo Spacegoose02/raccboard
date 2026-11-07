@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const cardId = new URLSearchParams(location.search).get('card');
-let card = null, editing = false, labelCache = { board: null, labels: [] };
+let card = null, noteColor = null, editing = false, labelCache = { board: null, labels: [] };
 
 // Turns a label colour into a soft sticky-note background.
 function tint(hex) {
@@ -33,10 +33,7 @@ function render({ checklists }) {
   if (document.activeElement !== $('desc')) $('desc').value = card.description || '';
   $('done').checked = !!card.completed;
   document.body.classList.toggle('completed', !!card.completed);
-  const label = labelCache.labels.find((l) => l.id === card.label_ids[0]);
-  const t = tint(label?.color);
-  document.documentElement.style.setProperty('--bg', t ? t.bg : '#fff7b1');
-  document.documentElement.style.setProperty('--bar', t ? t.bar : '#f5e97a');
+  applyColor();
   const due = card.due_date;
   $('due').textContent = due ? `Due ${new Date(due + (due.length === 10 ? 'T00:00' : '')).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}` : '';
   $('due').classList.toggle('late', !!due && !card.completed && due.slice(0, 10) < new Date().toISOString().slice(0, 10));
@@ -61,6 +58,14 @@ function render({ checklists }) {
     };
     wrap.append(add); box.append(wrap);
   }
+}
+
+// A color picked from the right-click menu wins over the card's first label color.
+function applyColor() {
+  const label = card && labelCache.labels.find((l) => l.id === card.label_ids[0]);
+  const t = tint(noteColor) || tint(label?.color);
+  document.documentElement.style.setProperty('--bg', t ? t.bg : '#fff7b1');
+  document.documentElement.style.setProperty('--bar', t ? t.bar : '#f5e97a');
 }
 
 async function save(fn) {
@@ -95,6 +100,11 @@ $('top').onclick = async () => {
   await rb.setOnTop(cardId, on);
   $('top').classList.toggle('on', on);
 };
-rb.noteState(cardId).then((s) => $('top').classList.toggle('on', !!s?.onTop));
+rb.noteState(cardId).then((s) => {
+  $('top').classList.toggle('on', !!s?.onTop);
+  noteColor = s?.color || null; applyColor();
+});
+window.addEventListener('contextmenu', (e) => { e.preventDefault(); rb.colorMenu(cardId); });
+rb.onColor((c) => { noteColor = c; applyColor(); });
 rb.onRefresh(load);
 load();
