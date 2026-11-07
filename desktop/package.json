@@ -1,0 +1,23 @@
+{
+  "name": "raccboard-notes",
+  "version": "0.1.0",
+  "description": "Raccboard Notes - pin Raccboard cards as sticky notes on your Windows desktop.",
+  "main": "main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.raccboard.notes",
+    "productName": "Raccboard Notes",
+    "files": ["main.js", "preload.js", "renderer/**", "icon.png"],
+    "win": { "target": "nsis", "icon": "icon.png" },
+    "directories": { "output": "dist" }
+  }
+}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Note</title>
+<link rel="stylesheet" href="note.css">
+</head><body>
+<header id="bar">
+  <span id="list"></span>
+  <span class="tools">
+    <button id="top" title="Keep on top">📌</button>
+    <button id="open" title="Open on the board">↗</button>
+    <button id="close" title="Unpin">✕</button>
+  </span>
+</header>
+<main>
+  <div class="titleRow">
+    <input type="checkbox" id="done" title="Mark complete">
+    <div id="title" contenteditable="plaintext-only" spellcheck="false"></div>
+  </div>
+  <div id="due"></div>
+  <textarea id="desc" placeholder="Add a note…"></textarea>
+  <div id="checklists"></div>
+  <p id="err"></p>
+</main>
+<script src="note.js"></script>
+</body></html>
