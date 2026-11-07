@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('rb', {
   unpin: (id) => call('unpin', id),
   noteState: (id) => call('noteState', id),
   setOnTop: (id, on) => call('setOnTop', id, on),
+  colorMenu: (id) => call('colorMenu', id),
+  onColor: (fn) => ipcRenderer.on('color', (_e, c) => fn(c)),
   openInBrowser: (boardId, cardId) => call('openInBrowser', boardId, cardId),
   changed: () => call('changed'),
   onRefresh: (fn) => ipcRenderer.on('refresh', fn),

@@ -175,6 +175,24 @@ handle('setOnTop', (e, cardId, on) => {
   store.notes[cardId].onTop = !!on; save();
   BrowserWindow.fromWebContents(e.sender)?.setAlwaysOnTop(!!on);
 });
+const NOTE_COLORS = [
+  ['Yellow', '#ffe14d'], ['Orange', '#ff9a3c'], ['Pink', '#ff6fa8'], ['Purple', '#a77bff'],
+  ['Blue', '#4da3ff'], ['Green', '#4cd07a'], ['Gray', '#9aa0a6'],
+];
+handle('colorMenu', (e, cardId) => {
+  const note = store.notes[cardId]; if (!note) return;
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const pick = (color) => () => {
+    if (!store.notes[cardId]) return;
+    store.notes[cardId].color = color; save();
+    if (!e.sender.isDestroyed()) e.sender.send('color', color);
+  };
+  Menu.buildFromTemplate([
+    { label: 'Note color', enabled: false },
+    { label: 'Use label color', type: 'radio', checked: !note.color, click: pick(null) },
+    ...NOTE_COLORS.map(([label, hex]) => ({ label, type: 'radio', checked: note.color === hex, click: pick(hex) })),
+  ]).popup({ window: win });
+});
 handle('openInBrowser', (_e, boardId, cardId) => shell.openExternal(`${store.serverUrl}/#/b/${boardId}/c/${cardId}`));
 handle('changed', (e) => { // a note edited its card: refresh the others showing the same data
   noteWins.forEach((w) => { if (!w.isDestroyed() && w.webContents !== e.sender) w.webContents.send('refresh'); });
