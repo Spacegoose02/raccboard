@@ -26,7 +26,7 @@ This writes `dist/Raccboard Notes Setup x.y.z.exe`.
 - Drag a note by its top bar and resize it from any edge. Position and size are remembered.
 - On a note: tick checklist items, add items, tick the box by the title to complete the card, click the title or text to edit.
 - 📌 keeps a note above other windows, ↗ opens the card in the browser, ✕ unpins it (the card is never deleted).
-- Note colour comes from the card's first label.
+- Right-click a note to pick its colour. By default ("Use label color") it comes from the card's first label.
 - The tray menu has show/hide all, refresh now, and Start with Windows (on by default in the installed app).
 
 Settings live in `%APPDATA%\raccboard-notes\notes.json`. The sign-in token is encrypted with Windows DPAPI.
