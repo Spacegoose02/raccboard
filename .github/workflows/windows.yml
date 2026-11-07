@@ -23,9 +23,9 @@ jobs:
         shell: bash
         working-directory: desktop
     steps:
+      # Manual runs build the workflow's own ref (main) and label it with the given tag,
+      # so older tags that predate build fixes can still get an installer.
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22

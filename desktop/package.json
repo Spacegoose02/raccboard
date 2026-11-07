@@ -5,6 +5,10 @@
   "main": "main.js",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Spacegoose02/raccboard.git"
+  },
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win nsis"
@@ -16,8 +20,25 @@
   "build": {
     "appId": "com.raccboard.notes",
     "productName": "Raccboard Notes",
-    "files": ["main.js", "preload.js", "renderer/**", "icon.png"],
-    "win": { "target": "nsis", "icon": "icon.png" },
-    "directories": { "output": "dist" }
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "icon.png"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Spacegoose02",
+        "repo": "raccboard"
+      }
+    ]
   }
 }
