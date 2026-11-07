@@ -62,9 +62,13 @@
 
 - [x] Simple list fixes: card menu no longer clipped (Delete reachable), growing text box, selecting text no longer drags the card
 
-## v1.3.3 (unreleased)
+## v1.3.3 (released 2026-11-02)
 
 - [x] Fix: Simple list ⋮ menu items take clicks again
+
+## v1.4.0 (released 2026-11-07)
+
+- [x] Raccboard Notes: Windows desktop app that pins cards as live sticky notes
 
 ## Phase 2: Accounts and sharing
 
