@@ -70,6 +70,10 @@
 
 - [x] Raccboard Notes: Windows desktop app that pins cards as live sticky notes
 
+## v1.4.1 (released 2026-11-07)
+
+- [x] Raccboard Notes: right-click a note to change its color; Windows installer attached to releases
+
 ## Phase 2: Accounts and sharing
 
 - [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email
