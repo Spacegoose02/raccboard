@@ -48,3 +48,15 @@ const ok = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(req.headers
 ```
 
 Deliveries time out after 5 seconds and are not retried; the last status is shown next to each webhook. Fetch `GET /boards/:id` to see what changed.
+
+## Planning endpoints
+
+- `GET /api/my-work` — cards you're a member of on every board (`?done=1` adds ones finished this week).
+- `POST /api/cards/:id/subcards {title}`; `PATCH /api/cards/:id {parent_id, priority (0–4), estimate, sprint_id}`.
+- `POST /api/boards/:id/bulk {card_ids, action, value}` — actions: move, add_label, remove_label, add_member, remove_member, complete, incomplete, archive, priority, sprint, due_date.
+- `GET|POST /api/boards/:id/views`, `DELETE /api/views/:id` — saved filters.
+- `GET|POST /api/boards/:id/sprints`, `PATCH|DELETE /api/sprints/:id` — closing carries unfinished cards to the next planned sprint.
+- `POST /api/cards/:id/timer/start|stop`, `POST /api/cards/:id/time {minutes, note}`, `DELETE /api/time/:id`, `GET /api/timer`.
+- `GET /api/boards/:id/report`.
+- `POST|DELETE /api/boards/:id/public-link`; `GET /api/public/:token` (no sign-in).
+- `POST|DELETE /api/boards/:id/inbound {list_id, rotate}`; `POST /api/inbound/:token {subject, text, from}` (JSON or form, no sign-in) creates a card.

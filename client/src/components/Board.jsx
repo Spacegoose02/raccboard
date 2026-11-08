@@ -17,6 +17,9 @@ import { CardCover, CompleteCircle, Composer, InlineEdit, Menu, Popover, backgro
 import { BackgroundPicker } from './BackgroundPicker.jsx';
 import { Avatar } from './Avatar.jsx';
 import { ShareDialog } from './Share.jsx';
+import { PRIORITIES, PriorityBadge, formatMinutes } from './Planning.jsx';
+import { BoardExtrasDrawer, BulkBar, SavedViews, SprintsDrawer } from './BoardTools.jsx';
+const ReportView = lazy(() => import('./ReportView.jsx'));
 const CardModal = lazy(() => import('./CardModal.jsx'));
 const ListView = lazy(() => import('./ListView.jsx'));
 const CalendarView = lazy(() => import('./CalendarView.jsx'));
@@ -29,6 +32,7 @@ const VIEWS = [
   { id: 'list', label: '☰ List' },
   { id: 'calendar', label: '📅 Calendar' },
   { id: 'timeline', label: '▤ Timeline' },
+  { id: 'report', label: '📊 Reports' },
 ];
 const viewKey = (boardId) => `rackboard.view.${boardId}`;
 const savedView = (boardId) => { try { return localStorage.getItem(viewKey(boardId)) || 'board'; } catch { return 'board'; } };
@@ -51,6 +55,14 @@ export default function Board({ boardId, cardId }) {
   const [showSummary, setShowSummary] = useState(false);
   const aiOn = useAiEnabled();
   const [showRules, setShowRules] = useState(false);
+  const [showSprints, setShowSprints] = useState(false);
+  const [showExtras, setShowExtras] = useState(false);
+  // Bulk selection and swimlanes.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState([]);
+  const [lanes, setLanesState] = useState(() => { try { return localStorage.getItem(`rackboard.lanes.${boardId}`) || ''; } catch { return ''; } });
+  const setLanes = (v) => { setLanesState(v); try { localStorage.setItem(`rackboard.lanes.${boardId}`, v); } catch { /* storage blocked */ } };
+  const [reportKey, setReportKey] = useState(0);
   // Phone list pager: which list is in view, and jumping to one.
   const listsRef = useRef(null);
   const [pagerIndex, setPagerIndex] = useState(0);
@@ -83,11 +95,13 @@ export default function Board({ boardId, cardId }) {
     try {
       const d = await api.get(`/boards/${boardId}`);
       if (dragRef.current) return; // don't clobber an in-progress drag
+      sprintStatusMap = Object.fromEntries((d.sprints || []).map((sp) => [sp.id, sp.status]));
       setData(d);
       setListOrder(d.lists.map((l) => l.id));
       const c = Object.fromEntries(d.lists.map((l) => [l.id, []]));
       for (const card of d.cards) c[card.list_id]?.push(card.id);
       setCols(c);
+      setReportKey((k) => k + 1);
       document.title = `${d.board.name} · ${APP_NAME}`;
     } catch (e) {
       // A failed background refresh (flaky Wi-Fi, server restart) keeps the board on screen.
@@ -149,9 +163,11 @@ export default function Board({ boardId, cardId }) {
         l: () => setView('list'),
         c: () => setView('calendar'),
         t: () => setView('timeline'),
+        r: () => setView('report'),
+        s: () => { setSelecting((v) => !v); setSelected([]); },
         n: () => document.querySelector('.list .composer-open')?.click(),
         '?': () => setShowKeys((s) => !s),
-        Escape: () => { setShowKeys(false); setFilter(NO_FILTER); },
+        Escape: () => { setShowKeys(false); setFilter(NO_FILTER); setSelecting(false); setSelected([]); },
       };
       const act = actions[e.key];
       if (act) { e.preventDefault(); act(); }
@@ -337,8 +353,10 @@ export default function Board({ boardId, cardId }) {
     load();
   };
   // Dragging is off for viewers, and while filtering (hidden cards would make positions ambiguous).
-  const ctx = { addBox, setBoxText, addPictures, removePictures, fields: data.fields || [], cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering, templates, addFromTemplate,
-    simple: board.layout === 'simple', archiveCard };
+  const toggleSelect = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const sprintsById = Object.fromEntries((data.sprints || []).map((sp) => [sp.id, sp]));
+  const ctx = { addBox, setBoxText, addPictures, removePictures, fields: data.fields || [], cardsById, labelsById, peopleById, toggleCard, boardId, canEdit, canDrag: canEdit && !filtering && !selecting, templates, addFromTemplate,
+    simple: board.layout === 'simple', archiveCard, selecting, selected, toggleSelect, agingDays: board.aging_days || 0, sprintsById };
 
   return (
     <div className={`board ${ctx.simple ? 'simple-layout' : ''} ${board.background ? 'has-bg' : ''}`} style={{ '--board-accent': board.color || 'var(--accent)', ...backgroundStyle(board) }}>
@@ -365,6 +383,8 @@ export default function Board({ boardId, cardId }) {
         {isOwner && <button className="btn subtle wide-only" onClick={() => setShowBg(true)}>🖼 Background</button>}
         {isOwner && <a className="btn subtle wide-only" href={`#/settings/board/${boardId}`}>⚙ Board settings</a>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowRules(true)} title="Automation rules">⚡ Automation</button>}
+        <button className="btn subtle wide-only" onClick={() => setShowSprints(true)} title="Sprints">🏃 Sprints</button>
+        {isOwner && <button className="btn subtle wide-only" onClick={() => setShowExtras(true)} title="Public link, email to board and card aging">🔗 Link &amp; email</button>}
         {canEdit && <button className="btn subtle wide-only" onClick={() => setShowArchived(true)}>🗃 Archived items</button>}
         {isOwner && <button className="btn subtle wide-only" onClick={toggleLayout} title="Switch how cards look on this board">{board.layout === 'simple' ? '▤ Card view' : '☐ Box view'}</button>}
         {isOwner && <button className="btn subtle wide-only" onClick={toggleBoardComplete}>{board.completed_at ? '↺ Reopen board' : '✓ Complete board'}</button>}
@@ -373,6 +393,9 @@ export default function Board({ boardId, cardId }) {
             isOwner && { label: '🖼 Background', onClick: () => setShowBg(true) },
             isOwner && { label: '⚙ Board settings', onClick: () => navigate(`/settings/board/${boardId}`) },
             { label: '⚡ Automation', onClick: () => setShowRules(true) },
+            { label: '🏃 Sprints', onClick: () => setShowSprints(true) },
+            isOwner && { label: '🔗 Link & email', onClick: () => setShowExtras(true) },
+            { label: selecting ? '☑ Stop selecting' : '☑ Select cards', onClick: () => { setSelecting(!selecting); setSelected([]); } },
             { label: '🗃 Archived items', onClick: () => setShowArchived(true) },
             isOwner && { label: board.layout === 'simple' ? '▤ Card view' : '☐ Box view', onClick: toggleLayout },
             isOwner && { label: board.completed_at ? '↺ Reopen board' : '✓ Complete board', onClick: toggleBoardComplete },
@@ -403,6 +426,30 @@ export default function Board({ boardId, cardId }) {
             </button>
           ))}
         </>}
+        <select className="due-filter" value={filter.priority[0] ?? ''} onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value === '' ? [] : [Number(e.target.value)] }))} aria-label="Filter by priority">
+          <option value="">Any priority</option>
+          {[...PRIORITIES].reverse().map((p) => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+        </select>
+        {(data.sprints || []).length > 0 && (
+          <select className="due-filter" value={filter.sprint} onChange={(e) => setFilter((f) => ({ ...f, sprint: e.target.value }))} aria-label="Filter by sprint">
+            <option value="">Any sprint</option>
+            <option value="active">Active sprint</option>
+            <option value="none">Backlog (no sprint)</option>
+            {data.sprints.filter((sp) => sp.status !== 'closed').map((sp) => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+          </select>
+        )}
+        <SavedViews boardId={boardId} filter={filter} setFilter={setFilter} isFiltering={filtering} canEdit={canEdit} empty={NO_FILTER} />
+        {view === 'board' && !ctx.simple && (
+          <select className="due-filter" value={lanes} onChange={(e) => setLanes(e.target.value)} aria-label="Swimlanes" title="Group the board into rows">
+            <option value="">No swimlanes</option>
+            <option value="member">Lanes: member</option>
+            <option value="label">Lanes: label</option>
+            <option value="priority">Lanes: priority</option>
+            <option value="sprint">Lanes: sprint</option>
+            <option value="parent">Lanes: parent card</option>
+          </select>
+        )}
+        {canEdit && <button className={`chip wide-only ${selecting ? 'on' : ''}`} title="Select several cards (s)" onClick={() => { setSelecting(!selecting); setSelected([]); }}>☑ Select</button>}
         {filtering && <button className="link-btn small" onClick={() => setFilter(NO_FILTER)}>Clear ({data.cards.filter(shows).length} shown)</button>}
         <button className="icon-btn wide-only" title="Keyboard shortcuts (?)" onClick={() => setShowKeys(true)}>⌨</button>
       </div>
@@ -418,9 +465,11 @@ export default function Board({ boardId, cardId }) {
       <Suspense fallback={<p className="muted loading-view">Loading…</p>}>
         {view === 'list' && <ListView data={data} cards={data.cards.filter(shows)} ctx={ctx} />}
         {view === 'timeline' && <TimelineView data={data} cards={data.cards.filter(shows)} ctx={ctx} />}
+        {view === 'report' && <ReportView boardId={boardId} refreshKey={reportKey} />}
+        {view === 'board' && lanes && !ctx.simple && <Swimlanes by={lanes} data={data} listOrder={listOrder} cols={cols} shows={shows} ctx={ctx} />}
         {view === 'calendar' && <CalendarView boardId={boardId} keep={keepEvent} canEdit={canEdit} onChanged={load} />}
       </Suspense>
-      {view === 'board' && <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
+      {view === 'board' && !(lanes && !ctx.simple) && <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
         <div className={`lists ${active ? 'is-dragging' : ''}`} ref={listsRef} onScroll={onListsScroll}>
           <SortableContext items={listOrder.map((id) => LIST + id)} strategy={horizontalListSortingStrategy}>
             {listOrder.map((id) => listsById[id] && (
@@ -446,7 +495,13 @@ export default function Board({ boardId, cardId }) {
         </DragOverlay>
       </DndContext>}
 
-      {view === 'board' && listOrder.length > 1 && (
+      {selecting && selected.length > 0 && (
+        <BulkBar boardId={boardId} selected={selected} data={data} onClear={() => { setSelecting(false); setSelected([]); }}
+          onDone={(archived) => { if (archived) setSelected([]); load(); }} />
+      )}
+      {showSprints && <SprintsDrawer boardId={boardId} sprints={data.sprints || []} cards={data.cards} canEdit={canEdit} onClose={() => setShowSprints(false)} onChanged={load} />}
+      {showExtras && <BoardExtrasDrawer board={board} lists={data.lists} onClose={() => setShowExtras(false)} onChanged={load} />}
+      {view === 'board' && !lanes && listOrder.length > 1 && (
         <nav className="list-pager" aria-label="Jump to list">
           {listOrder.map((id, i) => listsById[id] && (
             <button key={id} className={i === pagerIndex ? 'on' : ''} onClick={() => jumpToList(id, i)}>
@@ -463,6 +518,7 @@ export default function Board({ boardId, cardId }) {
           people={data.people}
           lists={data.lists}
           boardCards={data.cards}
+          sprints={data.sprints || []}
           onChanged={load}
           onClose={() => navigate(`/b/${boardId}`)}
         />
@@ -483,12 +539,19 @@ export default function Board({ boardId, cardId }) {
   );
 }
 
-const NO_FILTER = { members: [], mine: false, text: '', labels: [], due: '' };
-const isFiltering = (f) => f.mine || f.members.length > 0 || f.labels.length > 0 || !!f.due || !!f.text.trim();
+const NO_FILTER = { members: [], mine: false, text: '', labels: [], due: '', priority: [], sprint: '' };
+const isFiltering = (f) => f.mine || f.members.length > 0 || f.labels.length > 0 || !!f.due || !!f.text.trim() || (f.priority || []).length > 0 || !!f.sprint;
+// Sprint status lookup for the 'active sprint' filter, set when the board loads.
+let sprintStatusMap = {};
+const sprintStatus = (id) => sprintStatusMap[id];
 function cardMatches(card, f, meId) {
   if (f.mine && !card.member_ids.includes(meId)) return false;
   if (f.members.length && !f.members.some((id) => card.member_ids.includes(id))) return false;
   if (f.labels.length && !f.labels.some((id) => card.label_ids.includes(id))) return false;
+  if (f.priority?.length && !f.priority.includes(card.priority || 0)) return false;
+  if (f.sprint) {
+    if (f.sprint === 'none' ? card.sprint_id : f.sprint === 'active' ? !(card.sprint_id && sprintStatus(card.sprint_id) === 'active') : card.sprint_id !== f.sprint) return false;
+  }
   const q = f.text.trim().toLowerCase();
   if (q && !`${card.title}\n${card.description}`.toLowerCase().includes(q)) return false;
   if (f.due) {
@@ -504,7 +567,7 @@ function cardMatches(card, f, meId) {
 }
 const SHORTCUTS = [
   ['/', 'Search cards'], ['n', 'Add a card to the first list'], ['q', 'Toggle "My cards"'], ['x', 'Clear filters'],
-  ['b', 'Board view'], ['l', 'List view'], ['c', 'Calendar view'], ['t', 'Timeline view'], ['Esc', 'Close card / clear filters'], ['Ctrl K', 'Search and commands'], ['Ctrl Z', 'Undo'], ['Ctrl Shift Z', 'Redo'], ['?', 'Show these shortcuts'],
+  ['b', 'Board view'], ['l', 'List view'], ['c', 'Calendar view'], ['t', 'Timeline view'], ['r', 'Reports'], ['s', 'Select cards for bulk edit'], ['Esc', 'Close card / clear filters'], ['Ctrl K', 'Search and commands'], ['Ctrl Z', 'Undo'], ['Ctrl Shift Z', 'Redo'], ['?', 'Show these shortcuts'],
 ];
 
 function ListColumn({ list, cardIds, ctx, onUpdate, onAddCard, onArchiveCards }) {
@@ -716,9 +779,14 @@ function CardFace({ card, ctx, overlay }) {
   const labels = card.label_ids.map((id) => ctx.labelsById[id]).filter(Boolean);
   const due = dueStatus(card.due_date, card.completed);
   const checkDone = card.check_total > 0 && card.check_done === card.check_total;
+  const picked = ctx.selecting && ctx.selected.includes(card.id);
+  const stale = ctx.agingDays > 0 && !card.completed && Date.now() - Date.parse(card.updated_at) > ctx.agingDays * 864e5;
+  const ageWeeks = stale ? Math.floor((Date.now() - Date.parse(card.updated_at)) / (7 * 864e5)) : 0;
   return (
-    <div className={`card ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''} ${card.cover ? 'has-cover' : ''}`}
-      onClick={() => !overlay && navigate(`/b/${ctx.boardId}/c/${card.id}`)}>
+    <div className={`card ${card.completed ? 'completed' : ''} ${overlay ? 'overlay' : ''} ${card.cover ? 'has-cover' : ''} ${picked ? 'selected' : ''} ${stale ? `aged aged-${Math.min(3, Math.ceil((Date.now() - Date.parse(card.updated_at)) / (ctx.agingDays * 864e5)) - 1)}` : ''}`}
+      title={stale ? `No changes for ${ageWeeks ? `${ageWeeks} week${ageWeeks === 1 ? '' : 's'}` : `${ctx.agingDays}+ days`}` : undefined}
+      onClick={() => { if (overlay) return; if (ctx.selecting) ctx.toggleSelect(card.id); else navigate(`/b/${ctx.boardId}/c/${card.id}`); }}>
+      {ctx.selecting && !overlay && <span className={`select-box ${picked ? 'on' : ''}`} aria-hidden>{picked ? '✓' : ''}</span>}
       <CardCover cover={card.cover} />
       {card.is_template ? <span className="badge template-badge">▣ Template</span> : null}
       {labels.length > 0 && (
@@ -731,6 +799,13 @@ function CardFace({ card, ctx, overlay }) {
         <span className="card-title">{card.title}</span>
       </div>
       <div className="card-badges">
+        <PriorityBadge priority={card.priority} />
+        {card.estimate != null && <span className="badge plain estimate" title="Estimate (points)">◆ {card.estimate}</span>}
+        {card.sub_total > 0 && <span className={`badge ${card.sub_done === card.sub_total ? 'done' : 'plain'}`} title="Sub-cards done">🗂 {card.sub_done}/{card.sub_total}</span>}
+        {card.parent_id && ctx.cardsById[card.parent_id] && <span className="badge plain parent-badge" title={`Sub-card of ${ctx.cardsById[card.parent_id].title}`}>↳ {ctx.cardsById[card.parent_id].title.slice(0, 24)}</span>}
+        {card.time_minutes > 0 && <span className="badge plain" title="Time logged">⏱ {formatMinutes(card.time_minutes)}</span>}
+        {card.timer_user_id && <span className="badge soon" title="A timer is running">⏱ live</span>}
+        {card.sprint_id && ctx.sprintsById[card.sprint_id] && ctx.sprintsById[card.sprint_id].status !== 'closed' && <span className="badge plain" title="Sprint">🏃 {ctx.sprintsById[card.sprint_id].name}</span>}
         {(card.start_date || card.due_date) && (
           <span className={`badge ${due}`} title={due === 'overdue' ? 'Overdue' : 'Dates'}>
             🕑 {card.start_date && formatDate(card.start_date, { withTime: false })}
@@ -797,6 +872,54 @@ function ArchivedDrawer({ boardId, onClose, onChanged }) {
           </>
         )}
       </aside>
+    </div>
+  );
+}
+
+// Rows of lists grouped by member, label, priority, sprint or parent card. Click to open; drag is
+// off here because a drop would also have to change the lane's value.
+function Swimlanes({ by, data, listOrder, cols, shows, ctx }) {
+  const [folded, setFolded] = useState({});
+  const lanes = useMemo(() => {
+    const cards = data.cards.filter((c) => !c.is_template && shows(c));
+    const make = (key, name, test, color) => ({ key, name, color, has: test });
+    let defs = [];
+    if (by === 'member') defs = [...data.people.map((p) => make(p.id, p.display_name, (c) => c.member_ids.includes(p.id))), make('none', 'Unassigned', (c) => !c.member_ids.length)];
+    if (by === 'label') defs = [...data.labels.map((l) => make(l.id, l.name || 'Label', (c) => c.label_ids.includes(l.id), l.color)), make('none', 'No label', (c) => !c.label_ids.length)];
+    if (by === 'priority') defs = [4, 3, 2, 1, 0].map((p) => make(String(p), `${PRIORITIES[p].icon} ${PRIORITIES[p].name}`, (c) => (c.priority || 0) === p));
+    if (by === 'sprint') defs = [...(data.sprints || []).filter((sp) => sp.status !== 'closed').map((sp) => make(sp.id, `${sp.name}${sp.status === 'active' ? ' (active)' : ''}`, (c) => c.sprint_id === sp.id)), make('none', 'Backlog', (c) => !c.sprint_id || ctx.sprintsById[c.sprint_id]?.status === 'closed')];
+    if (by === 'parent') {
+      const parents = data.cards.filter((c) => c.sub_total > 0);
+      defs = [...parents.map((p) => make(p.id, p.title, (c) => c.parent_id === p.id || c.id === p.id)), make('none', 'Everything else', (c) => !c.parent_id && !c.sub_total)];
+    }
+    return defs.map((d) => ({ ...d, cards: cards.filter(d.has) })).filter((d) => d.cards.length || d.key !== 'none');
+  }, [by, data, shows, ctx.sprintsById]);
+  return (
+    <div className="swimlanes">
+      {lanes.map((lane) => (
+        <section key={lane.key} className="swimlane">
+          <button className="lane-head" onClick={() => setFolded((f) => ({ ...f, [lane.key]: !f[lane.key] }))}>
+            <span className="chev">{folded[lane.key] ? '▸' : '▾'}</span>
+            {lane.color && <span className="label-dot" style={{ background: lane.color }} />}
+            <strong>{lane.name}</strong> <span className="muted small">{lane.cards.length}</span>
+          </button>
+          {!folded[lane.key] && (
+            <div className="lists lane-lists">
+              {listOrder.map((id) => {
+                const list = data.lists.find((l) => l.id === id);
+                if (!list) return null;
+                const ids = (cols[id] || []).filter((cid) => lane.cards.some((c) => c.id === cid));
+                return (
+                  <div key={id} className="list lane-list">
+                    <div className="list-head"><span className="list-name">{list.name}</span><span className="list-count">{ids.length}</span></div>
+                    <div className="cards">{ids.map((cid) => ctx.cardsById[cid] && <CardFace key={cid} card={ctx.cardsById[cid]} ctx={ctx} />)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ))}
     </div>
   );
 }

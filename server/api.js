@@ -17,6 +17,7 @@ import { integrationsRouter } from './integrations.js';
 import { aiRouter } from './ai.js';
 import { realtimeRouter, broadcastWrites } from './realtime.js';
 import { featuresRouter, runAutomations, createBoardFrom, copyCard } from './features.js';
+import { proRouter, publicRouter } from './pro.js';
 
 export const api = express.Router();
 // The Android app is served from its own origin (http://localhost), so allow cross-origin calls.
@@ -40,6 +41,8 @@ api.get('/health', (_req, res) => res.json({ ok: true }));
 // Sign-in, profiles and user admin. Everything after requireUser needs a session.
 // The calendar feed is authenticated by its secret URL, not a session.
 api.use(feedRouter);
+// Public read-only board links and email-to-board are authenticated by their secret tokens.
+api.use(publicRouter);
 api.use(authRouter);
 api.use(requireUser);
 api.use(withRequest);
@@ -58,6 +61,7 @@ api.use(sharingRouter);
 api.use(calendarRouter);
 api.use(emailRouter);
 api.use(featuresRouter);
+api.use(proRouter);
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -123,7 +127,7 @@ api.get('/boards', (req, res) => {
       (SELECT COUNT(*) FROM cards c JOIN lists l ON l.id = c.list_id
         WHERE l.board_id = b.id AND c.archived = 0 AND l.archived = 0 AND c.completed = 1) AS done_count
     FROM boards b WHERE ${VISIBLE_BOARDS_SQL} ORDER BY b.position, b.created_at`).all(...visibleParams(req.user))
-    .map((b) => ({ ...b, my_role: boardRole(b.id, req.user) }));
+    .map((b) => { const my_role = boardRole(b.id, req.user); return { ...b, my_role, ...(my_role === 'owner' ? {} : { public_token: null, inbound_token: null }) }; });
   res.json(boards);
 });
 
@@ -181,6 +185,10 @@ api.get('/boards/:id', (req, res) => {
       (SELECT json_group_array(label_id) FROM card_labels WHERE card_id = c.id) AS label_ids,
       (SELECT json_group_array(user_id) FROM card_members WHERE card_id = c.id) AS member_ids,
       (SELECT json_group_array(blocked_by_id) FROM card_dependencies WHERE card_id = c.id) AS blocked_by,
+      (SELECT COUNT(*) FROM cards s WHERE s.parent_id = c.id AND s.archived = 0) AS sub_total,
+      (SELECT COUNT(*) FROM cards s WHERE s.parent_id = c.id AND s.archived = 0 AND s.completed = 1) AS sub_done,
+      (SELECT COALESCE(SUM(minutes), 0) FROM time_entries WHERE card_id = c.id AND ended_at IS NOT NULL) AS time_minutes,
+      (SELECT user_id FROM time_entries WHERE card_id = c.id AND ended_at IS NULL LIMIT 1) AS timer_user_id,
       (SELECT MIN(d) FROM (
         SELECT i.due_date AS d FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id
           WHERE cl.card_id = c.id AND i.done = 0 AND i.due_date IS NOT NULL
@@ -202,7 +210,10 @@ api.get('/boards/:id', (req, res) => {
     (values[v.card_id] ||= {})[v.field_id] = v.value;
   }
   for (const c of cards) c.field_values = values[c.id] || {};
-  res.json({ board: { ...board, my_role: boardRole(board.id, req.user) }, lists, cards, labels, people, fields });
+  const sprints = db.prepare('SELECT * FROM sprints WHERE board_id = ? ORDER BY COALESCE(start_date, created_at)').all(board.id);
+  const my_role = boardRole(board.id, req.user);
+  const safeBoard = my_role === 'owner' ? board : { ...board, public_token: null, inbound_token: null };
+  res.json({ board: { ...safeBoard, my_role }, lists, cards, labels, people, fields, sprints });
 });
 
 /* ---------- Dates (calendar) ---------- */
@@ -237,7 +248,8 @@ api.patch('/boards/:id', (req, res) => {
   const b = req.body;
   db.transaction(() => {
     patch('boards', board.id, b, { name: (v) => str(v, 120) || board.name, color: (v) => colorOr(v, null), archived: bool,
-      layout: (v) => (v === 'simple' ? 'simple' : null) });
+      layout: (v) => (v === 'simple' ? 'simple' : null),
+      aging_days: (v) => Math.max(0, Math.min(365, Math.round(Number(v) || 0))) });
     if ('background' in b) setBackground(board, cleanBackground(b.background));
     if ('completed' in b) {
       db.prepare('UPDATE boards SET completed_at = ? WHERE id = ?').run(b.completed ? now() : null, board.id);
@@ -421,7 +433,12 @@ api.get('/cards/:id', (req, res) => {
   const blocked_by = depCards('d.blocked_by_id WHERE d.card_id = ?');
   const blocking = depCards('d.card_id WHERE d.blocked_by_id = ?');
   const field_values = Object.fromEntries(db.prepare('SELECT field_id, value FROM card_field_values WHERE card_id = ?').all(card.id).map((v) => [v.field_id, v.value]));
-  res.json({ card: { ...card, list_name: list.name, label_ids, member_ids, field_values, blocked_by, blocking, my_role: boardRole(card.board_id, req.user) }, checklists, attachments, comments, activity, fields: boardFields(card.board_id) });
+  const parent = card.parent_id ? db.prepare('SELECT id, title, completed FROM cards WHERE id = ?').get(card.parent_id) || null : null;
+  const children = db.prepare(`SELECT c.id, c.title, c.completed, c.priority, c.due_date, l.name AS list_name FROM cards c JOIN lists l ON l.id = c.list_id
+    WHERE c.parent_id = ? AND c.archived = 0 ORDER BY c.created_at`).all(card.id);
+  const time_entries = db.prepare(`SELECT t.*, u.display_name AS user_name FROM time_entries t LEFT JOIN users u ON u.id = t.user_id
+    WHERE t.card_id = ? ORDER BY t.started_at DESC LIMIT 100`).all(card.id);
+  res.json({ card: { ...card, list_name: list.name, label_ids, member_ids, field_values, blocked_by, blocking, parent, children, my_role: boardRole(card.board_id, req.user) }, checklists, attachments, comments, activity, time_entries, fields: boardFields(card.board_id) });
 });
 
 api.patch('/cards/:id', (req, res) => {
@@ -434,7 +451,13 @@ api.patch('/cards/:id', (req, res) => {
       start_date: dateOrNull, due_date: dateOrNull, completed: bool, archived: bool, is_template: bool,
       cover: (v) => cleanCover(v, card.id),
       recurrence: (v) => (RECURRENCES.includes(v) ? v : null),
+      priority: cleanPriority, estimate: cleanEstimate,
+      parent_id: (v) => cleanParent(v, card),
+      sprint_id: (v) => cleanSprint(v, card.board_id),
     });
+    if ('completed' in b && bool(b.completed) !== card.completed) {
+      db.prepare('UPDATE cards SET completed_at = ? WHERE id = ?').run(b.completed ? now() : null, card.id);
+    }
     touchCard(card.id);
     const log = (t) => logActivity(card.board_id, card.id, req.who, t);
     if ('completed' in b && bool(b.completed) !== card.completed) log(b.completed ? 'marked this card complete' : 'marked this card incomplete');
@@ -452,6 +475,8 @@ api.patch('/cards/:id', (req, res) => {
     if ('description' in b && b.description !== card.description) log('updated the description');
     if ('due_date' in b && dateOrNull(b.due_date) !== card.due_date) log(b.due_date ? `set the due date to ${b.due_date}` : 'removed the due date');
     if ('start_date' in b && dateOrNull(b.start_date) !== card.start_date) log(b.start_date ? `set the start date to ${b.start_date}` : 'removed the start date');
+    if ('priority' in b && cleanPriority(b.priority) !== card.priority) log(`set the priority to ${PRIORITY_NAMES[cleanPriority(b.priority)]}`);
+    if ('parent_id' in b && (b.parent_id || null) !== card.parent_id) log(b.parent_id ? 'made this a sub-card' : 'made this a top-level card');
     if ('recurrence' in b && (b.recurrence || null) !== card.recurrence) log(b.recurrence ? `set this card to repeat ${b.recurrence}` : 'stopped this card repeating');
   })();
   let next = null;
@@ -459,6 +484,26 @@ api.patch('/cards/:id', (req, res) => {
   if ('completed' in b && b.completed && !card.completed) runAutomations('card_completed', { cardId: card.id, who: req.who });
   res.json({ ...getCard(card.id), next_card_id: next });
 });
+
+export const PRIORITY_NAMES = ['none', 'low', 'medium', 'high', 'urgent'];
+export const cleanPriority = (v) => { const n = Math.round(Number(v)); return n >= 0 && n <= 4 ? n : 0; };
+const cleanEstimate = (v) => { if (v === null || v === '' || v === undefined) return null; const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= 10000 ? Math.round(n * 100) / 100 : null; };
+// A parent must be on the same board and can't be the card itself or one of its descendants.
+function cleanParent(v, card) {
+  if (!v) return null;
+  const p = db.prepare('SELECT c.id, c.parent_id, l.board_id FROM cards c JOIN lists l ON l.id = c.list_id WHERE c.id = ?').get(String(v));
+  if (!p || p.board_id !== card.board_id) throw new HttpError(400, 'A parent card must be on the same board');
+  for (let cur = p, depth = 0; cur; depth++) {
+    if (cur.id === card.id || depth > 50) throw new HttpError(400, 'That would put the card inside itself');
+    cur = cur.parent_id && db.prepare('SELECT id, parent_id FROM cards WHERE id = ?').get(cur.parent_id);
+  }
+  return p.id;
+}
+function cleanSprint(v, boardId) {
+  if (!v) return null;
+  if (!db.prepare('SELECT 1 FROM sprints WHERE id = ? AND board_id = ?').get(String(v), boardId)) throw new HttpError(400, 'That sprint is not on this board');
+  return String(v);
+}
 
 // Covers are 'color:<css color>' or 'image:<attachment id on this card>'.
 function cleanCover(v, cardId) {

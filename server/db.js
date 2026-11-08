@@ -331,6 +331,55 @@ const migrations = [
   );
   CREATE INDEX idx_webhooks_board ON webhooks(board_id);
   `,
+  // v18: planning (priority, estimate, sub-cards, sprints), time tracking, saved views,
+  // public read-only links, email-to-board and card aging
+  `
+  CREATE TABLE sprints (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    status TEXT NOT NULL DEFAULT 'planned',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_sprints_board ON sprints(board_id);
+  ALTER TABLE cards ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE cards ADD COLUMN estimate REAL;
+  ALTER TABLE cards ADD COLUMN parent_id TEXT REFERENCES cards(id) ON DELETE SET NULL;
+  ALTER TABLE cards ADD COLUMN sprint_id TEXT REFERENCES sprints(id) ON DELETE SET NULL;
+  ALTER TABLE cards ADD COLUMN completed_at TEXT;
+  UPDATE cards SET completed_at = updated_at WHERE completed = 1;
+  CREATE INDEX idx_cards_parent ON cards(parent_id);
+  CREATE INDEX idx_cards_sprint ON cards(sprint_id);
+  CREATE TABLE time_entries (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    minutes REAL,
+    note TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX idx_time_entries_card ON time_entries(card_id);
+  CREATE INDEX idx_time_entries_user ON time_entries(user_id, ended_at);
+  CREATE TABLE saved_views (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    filter TEXT NOT NULL,
+    shared INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_saved_views_board ON saved_views(board_id);
+  ALTER TABLE boards ADD COLUMN public_token TEXT;
+  ALTER TABLE boards ADD COLUMN inbound_token TEXT;
+  ALTER TABLE boards ADD COLUMN inbound_list_id TEXT;
+  ALTER TABLE boards ADD COLUMN aging_days INTEGER NOT NULL DEFAULT 0;
+  CREATE UNIQUE INDEX idx_boards_public_token ON boards(public_token) WHERE public_token IS NOT NULL;
+  CREATE UNIQUE INDEX idx_boards_inbound_token ON boards(inbound_token) WHERE inbound_token IS NOT NULL;
+  `,
 ];
 
 function migrate() {
