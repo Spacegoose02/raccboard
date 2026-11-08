@@ -242,7 +242,9 @@ textarea { resize: vertical; }
 .board.has-bg { background-size: cover; background-position: center; background-attachment: fixed; }
 .board.has-bg .board-bar, .board.has-bg .filter-bar { background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(6px); }
 .tile.has-bg { background-size: cover; background-position: center; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+/* Fixed to the viewport: rendered after the filter bar, an absolute popover lands below the visible board. */
 .bg-pop { width: 300px; }
+@media (min-width: 601px) { .bg-pop { position: fixed; right: 16px; top: 120px; max-height: calc(100vh - 136px); overflow-y: auto; } }
 .bg-pop .field-label { margin: 10px 0 6px; font-weight: 600; }
 .bg-preview { height: 64px; border-radius: 6px; background: var(--board-bar); background-size: cover; background-position: center; }
 .bg-url { display: flex; gap: 6px; margin-top: 8px; }

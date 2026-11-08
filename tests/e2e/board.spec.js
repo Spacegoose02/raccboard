@@ -115,3 +115,16 @@ test('simple layout: box menu opens and Delete removes the box', async ({ page, 
   await del.click();
   await expect(page.locator('.simple-box', { hasText: 'tester' })).toHaveCount(0);
 });
+
+test('Background button opens the background picker on screen', async ({ page }) => {
+  await signIn(page);
+  await page.getByText('Create new board', { exact: false }).first().click();
+  await page.getByPlaceholder('Board name').fill('Background board');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/b\//);
+  await page.getByRole('button', { name: '🖼 Background' }).click();
+  const pop = page.locator('.bg-pop');
+  await expect(pop).toBeInViewport();
+  await pop.getByRole('button', { name: 'ocean gradient' }).click();
+  await expect(page.locator('.board.has-bg')).toBeVisible();
+});
