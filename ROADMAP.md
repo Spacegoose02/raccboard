@@ -78,6 +78,10 @@
 
 - [x] Planning suite: sub-cards, priority and estimates, My work, saved views, bulk edit, swimlanes, sprints, Reports view, time tracking, public read-only links, email to board, card aging
 
+## v1.5.1 (released 2026-11-08)
+
+- [x] Fix: board Background picker opens in view instead of below the board
+
 ## Phase 2: Accounts and sharing
 
 - [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email
