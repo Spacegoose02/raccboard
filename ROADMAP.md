@@ -74,6 +74,10 @@
 
 - [x] Raccboard Notes: right-click a note to change its color; Windows installer attached to releases
 
+## v1.5.0 (released 2026-11-08)
+
+- [x] Planning suite: sub-cards, priority and estimates, My work, saved views, bulk edit, swimlanes, sprints, Reports view, time tracking, public read-only links, email to board, card aging
+
 ## Phase 2: Accounts and sharing
 
 - [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email
