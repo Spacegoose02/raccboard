@@ -212,7 +212,7 @@ export function runAutomations(trigger, { cardId, listId, who }) {
       const log = (text) => logActivity(c.board_id, c.id, { name: 'Automation', id: null }, text);
       const touch = () => db.prepare('UPDATE cards SET updated_at = ? WHERE id = ?').run(now(), c.id);
       switch (r.action) {
-        case 'complete': if (!c.completed) { db.prepare('UPDATE cards SET completed = 1 WHERE id = ?').run(c.id); touch(); log('marked this card complete'); } break;
+        case 'complete': if (!c.completed) { db.prepare('UPDATE cards SET completed = 1, completed_at = ? WHERE id = ?').run(now(), c.id); touch(); log('marked this card complete'); } break;
         case 'uncomplete': if (c.completed) { db.prepare('UPDATE cards SET completed = 0 WHERE id = ?').run(c.id); touch(); log('marked this card incomplete'); } break;
         case 'archive': if (!c.archived) { db.prepare('UPDATE cards SET archived = 1 WHERE id = ?').run(c.id); touch(); log('archived this card'); } break;
         case 'remove_due': if (c.due_date) { db.prepare('UPDATE cards SET due_date = NULL WHERE id = ?').run(c.id); touch(); log('removed the due date'); } break;

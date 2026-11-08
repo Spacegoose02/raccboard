@@ -12,6 +12,8 @@ const Settings = lazy(() => import('./components/Settings.jsx'));
 import ServerSetup from './components/ServerSetup.jsx';
 import SignIn from './components/SignIn.jsx';
 const CalendarView = lazy(() => import('./components/CalendarView.jsx'));
+const MyWork = lazy(() => import('./components/MyWork.jsx'));
+const PublicBoard = lazy(() => import('./components/PublicBoard.jsx'));
 import { Avatar } from './components/Avatar.jsx';
 import { Menu } from './components/ui.jsx';
 
@@ -19,6 +21,8 @@ import { Menu } from './components/ui.jsx';
 function parse(hash) {
   const parts = hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
   if (parts[0] === 'calendar') return { page: 'calendar' };
+  if (parts[0] === 'me') return { page: 'me' };
+  if (parts[0] === 'p' && parts[1]) return { page: 'public', token: parts[1] };
   if (parts[0] === 'reset' && parts[1]) return { page: 'reset', token: parts[1] };
   if (parts[0] === 'settings') return { page: 'settings', boardId: parts[1] === 'board' ? parts[2] : null };
   if (parts[0] === 'b' && parts[1]) return { page: 'board', boardId: parts[1], cardId: parts[2] === 'c' ? parts[3] : null };
@@ -58,11 +62,12 @@ export default function App() {
   useEffect(() => { if (!needsServer) refreshAuth(); }, [needsServer, serverUrl]);
 
   useEffect(() => {
-    if (route.page !== 'board') document.title = route.page === 'settings' ? `Settings · ${APP_NAME}` : route.page === 'calendar' ? `Calendar · ${APP_NAME}` : APP_NAME;
+    if (route.page !== 'board') document.title = route.page === 'settings' ? `Settings · ${APP_NAME}` : route.page === 'calendar' ? `Calendar · ${APP_NAME}` : route.page === 'me' ? `My work · ${APP_NAME}` : APP_NAME;
   }, [route.page]);
 
   let content;
   if (needsServer) content = <ServerSetup onDone={() => { window.location.hash = '/'; }} />;
+  else if (route.page === 'public') content = <Suspense fallback={<div className="page"><p className="muted">Loading…</p></div>}><PublicBoard token={route.token} /></Suspense>;
   else if (auth.loading) content = <div className="page"><p className="muted">Loading…</p></div>;
   else if (auth.error && !auth.user) {
     content = (
@@ -78,6 +83,7 @@ export default function App() {
     content = (
       <Suspense fallback={<div className="page"><p className="muted">Loading…</p></div>}>
         {route.page === 'home' && <Home />}
+        {route.page === 'me' && <MyWork />}
         {route.page === 'calendar' && <div className="page wide"><h2>Calendar</h2><p className="muted small">Everything with a date on every board you can open.</p><CalendarView /></div>}
         {route.page === 'settings' && <Settings key={route.boardId || ''} boardId={route.boardId} />}
         {route.page === 'board' && <Board key={route.boardId} boardId={route.boardId} cardId={route.cardId} />}
@@ -92,6 +98,7 @@ export default function App() {
         {auth.user && (
           <nav className="topnav">
             <a href="#/" className={route.page === 'home' ? 'active' : ''}>Boards</a>
+            <a href="#/me" className={route.page === 'me' ? 'active' : ''} title="Cards assigned to you on every board">✔<span className="hide-sm"> My work</span></a>
             <a href="#/calendar" className={route.page === 'calendar' ? 'active' : ''} title="Calendar">📅<span className="hide-sm"> Calendar</span></a>
             <button className="palette-btn" onClick={() => window.dispatchEvent(new Event('rb:palette'))} title="Search and commands (Ctrl+K)">🔍<span className="hide-sm"> Ctrl K</span></button>
             <a href="#/settings" className={route.page === 'settings' ? 'active' : ''} title="Settings">⚙<span className="hide-sm"> Settings</span></a>

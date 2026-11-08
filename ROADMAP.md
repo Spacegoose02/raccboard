@@ -108,3 +108,10 @@
 - [ ] Offline edits in the app with sync when the server is reachable
 - [x] Import from Trello JSON
 - [x] Card covers, search and label/due filters, keyboard shortcuts, copy card, card and board templates, Butler-style automation rules
+
+## Next (in review)
+
+- [ ] Sub-cards with a progress roll-up, priority and point estimates, time tracking (timer and logged time)
+- [ ] My work page across every board, saved views, bulk select and edit, swimlanes (member, label, priority, sprint, parent)
+- [ ] Sprints with carry-over, Reports view (workload, priority, throughput, cycle time, burndown)
+- [ ] Public read-only board links, email-to-board via an inbound-email webhook, card aging

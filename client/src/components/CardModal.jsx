@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CardFields } from './CustomFields.jsx';
 import { CardDependencies } from './Dependencies.jsx';
+import { CardPlanning, SubCards, TimeTracking } from './Planning.jsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api, apiUrl } from '../api.js';
@@ -15,7 +16,7 @@ import EmailCard from './EmailCard.jsx';
 const mdComponents = { a: (props) => <a {...props} target="_blank" rel="noreferrer noopener" /> };
 const Markdown = ({ children }) => <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{children}</ReactMarkdown></div>;
 
-export default function CardModal({ cardId, labels, people = [], lists = [], boardCards = [], onChanged, onClose }) {
+export default function CardModal({ cardId, labels, people = [], lists = [], boardCards = [], sprints = [], onChanged, onClose }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
   const [pop, setPop] = useState(null); // 'labels' | 'dates' | 'checklist' | 'members' | 'cover' | 'copy'
@@ -66,7 +67,7 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
   }
   if (!detail) return <div className="modal-backdrop"><div className="modal small"><p className="muted">Loading…</p></div></div>;
 
-  const { card, checklists, attachments, comments, activity, fields = [] } = detail;
+  const { card, checklists, attachments, comments, activity, time_entries = [], fields = [] } = detail;
   const patchCard = (body) => run(() => api.patch(`/cards/${card.id}`, body));
   const cardLabels = labels.filter((l) => card.label_ids.includes(l.id));
   const due = dueStatus(card.due_date, card.completed);
@@ -214,11 +215,17 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
               </div>
             )}
 
+            <CardPlanning card={card} sprints={sprints} patchCard={patchCard} readOnly={!canEdit} />
+
             <Description value={card.description} onSave={(description) => patchCard({ description })} readOnly={!canEdit} onDirty={(d) => setDraftDirty('description', d)} />
 
             <CardFields card={card} fields={fields} run={run} readOnly={!canEdit} />
 
+            <SubCards card={card} boardCards={boardCards} run={run} patchCard={patchCard} readOnly={!canEdit} />
+
             <CardDependencies card={card} boardCards={boardCards} run={run} readOnly={!canEdit} />
+
+            <TimeTracking card={card} entries={time_entries} meId={me.id} run={run} readOnly={!canEdit} />
 
             {attachments.length > 0 && (
               <section className="section">

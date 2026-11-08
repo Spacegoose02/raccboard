@@ -33,7 +33,8 @@
     "smoke:fields": "node scripts/smoke-fields.js",
     "smoke:dependencies": "node scripts/smoke-dependencies.js",
     "smoke:recurring": "node scripts/smoke-recurring.js",
-    "smoke:integrations": "node scripts/smoke-integrations.js"
+    "smoke:integrations": "node scripts/smoke-integrations.js",
+    "smoke:pro": "node scripts/smoke-pro.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
