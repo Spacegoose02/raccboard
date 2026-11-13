@@ -16,8 +16,26 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Release signing for Play Store / sideloading. Reads android/keystore.properties
+    // (storeFile, storePassword, keyAlias, keyPassword) or the RACCBOARD_KEYSTORE* env vars.
+    // Without either, release builds are unsigned and debug builds are unaffected.
+    def ksProps = new Properties()
+    def ksFile = rootProject.file('keystore.properties')
+    if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
+    def ksPath = ksProps['storeFile'] ?: System.getenv('RACCBOARD_KEYSTORE')
+    signingConfigs {
+        if (ksPath) {
+            release {
+                storeFile file(ksPath)
+                storePassword ksProps['storePassword'] ?: System.getenv('RACCBOARD_KEYSTORE_PASSWORD')
+                keyAlias ksProps['keyAlias'] ?: System.getenv('RACCBOARD_KEY_ALIAS')
+                keyPassword ksProps['keyPassword'] ?: System.getenv('RACCBOARD_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (ksPath) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

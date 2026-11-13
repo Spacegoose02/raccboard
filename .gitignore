@@ -8,3 +8,6 @@ Thumbs.db
 release/
 test-results/
 playwright-report/
+android/keystore.properties
+*.jks
+*.keystore
