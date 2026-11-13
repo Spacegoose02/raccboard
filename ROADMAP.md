@@ -84,7 +84,7 @@
 
 ## v1.5.2 (released 2026-11-13)
 
-- [x] Fix: card detail sections (Checklist, Time, Dependencies) have solid backgrounds; Time and Dependencies now sit under the Checklist
+- [x] Fix: card detail on phones no longer turns see-through below the first screen (Checklist, Time, Dependencies); Time and Dependencies now sit under the Checklist
 
 ## Phase 2: Accounts and sharing
 
