@@ -22,6 +22,8 @@
     "icons": "node scripts/icons.js",
     "android:sync": "npm run build && cap sync android",
     "android:apk": "node scripts/apk.js debug",
+    "android:release": "node scripts/apk.js release",
+    "android:aab": "node scripts/apk.js bundle",
     "android:open": "cap open android",
     "smoke:oidc": "node scripts/smoke-oidc.js",
     "smoke:google": "node scripts/smoke-google.js",

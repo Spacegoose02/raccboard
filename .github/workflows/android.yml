@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
   push:
     tags: ['v*']
+  pull_request:
+    paths: ['android/**', 'scripts/apk.js', 'capacitor.config.json', '.github/workflows/android.yml']
+
+permissions:
+  contents: write
 
 jobs:
   apk:
@@ -22,7 +27,35 @@ jobs:
       - run: npm ci
       - run: chmod +x android/gradlew
       - run: npm run android:apk
+
+      # Signed release APK + Play Store bundle, only when the signing secrets exist.
+      - name: Decode keystore
+        id: ks
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        if: env.KS_B64 != ''
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/raccboard.jks"
+          echo "path=$RUNNER_TEMP/raccboard.jks" >> "$GITHUB_OUTPUT"
+      - name: Build signed APK and AAB
+        if: steps.ks.outputs.path != ''
+        env:
+          RACCBOARD_KEYSTORE: ${{ steps.ks.outputs.path }}
+          RACCBOARD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RACCBOARD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RACCBOARD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          npm run android:release
+          npm run android:aab
+
       - uses: actions/upload-artifact@v4
         with:
-          name: rackboard-apk
-          path: release/*.apk
+          name: raccboard-android
+          path: |
+            release/*.apk
+            release/*.aab
+      - name: Attach APK to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" release/*.apk --clobber || echo "No release for ${GITHUB_REF_NAME} yet"

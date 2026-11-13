@@ -228,6 +228,8 @@ The debug APK is written to `release/Raccboard-<version>-debug.apk`. To sideload
 
 You can also build it in GitHub Actions: run the **Android APK** workflow manually or push a `v*` tag, then download the APK from the run's artifacts.
 
+For a signed release APK or a Google Play bundle (`npm run android:release`, `npm run android:aab`), see [docs/play-store.md](docs/play-store.md).
+
 `npm run icons` regenerates the PWA icons, Android launcher icons and splash screens from `scripts/icons.js`.
 
 The API allows cross-origin requests so the app can reach it. `CORS_ORIGIN` (default `*`) narrows this down.
