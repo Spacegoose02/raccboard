@@ -345,7 +345,7 @@ input.board-title { width: auto; min-width: 240px; }
 .list-pill { background: var(--btn-bg); border-radius: 4px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
 .archived-banner { background: var(--warn-bg); color: var(--warn); padding: 8px 16px; display: flex; gap: 12px; align-items: center; }
 .modal-body { display: flex; min-height: 420px; }
-.modal-main { flex: 1.5; min-width: 0; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 20px; }
+.modal-main { flex: 1.5; min-width: 0; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 20px; background: var(--modal-bg); border-bottom-left-radius: 12px; }
 .modal-side {
   flex: 1; min-width: 0; padding: 16px; background: var(--modal-side); border-left: 1px solid var(--border);
   border-bottom-right-radius: 12px; display: flex; flex-direction: column; gap: 12px;
@@ -365,6 +365,8 @@ textarea.modal-title { min-height: 40px; }
 .tag.warn { background: var(--warn-bg); color: var(--warn); }
 .tag.success { background: var(--success-bg); color: var(--success); }
 .section { display: flex; flex-direction: column; gap: 8px; position: relative; }
+/* Solid fill so board backgrounds never show through card sections */
+.modal-main > .section { background: var(--modal-bg); }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .placeholder-box {
   text-align: left; background: var(--btn-bg); border: none; border-radius: 8px; padding: 10px 12px; min-height: 56px; color: var(--muted);

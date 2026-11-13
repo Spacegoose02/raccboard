@@ -82,6 +82,10 @@
 
 - [x] Fix: board Background picker opens in view instead of below the board
 
+## v1.5.2 (released 2026-11-13)
+
+- [x] Fix: card detail sections (Checklist, Time, Dependencies) have solid backgrounds; Time and Dependencies now sit under the Checklist
+
 ## Phase 2: Accounts and sharing
 
 - [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email

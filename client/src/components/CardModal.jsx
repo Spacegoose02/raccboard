@@ -223,10 +223,6 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
 
             <SubCards card={card} boardCards={boardCards} run={run} patchCard={patchCard} readOnly={!canEdit} />
 
-            <CardDependencies card={card} boardCards={boardCards} run={run} readOnly={!canEdit} />
-
-            <TimeTracking card={card} entries={time_entries} meId={me.id} run={run} readOnly={!canEdit} />
-
             {attachments.length > 0 && (
               <section className="section">
                 <div className="section-head">
@@ -252,6 +248,10 @@ export default function CardModal({ cardId, labels, people = [], lists = [], boa
             )}
 
             {checklists.map((cl) => <Checklist key={cl.id} checklist={cl} run={run} readOnly={!canEdit} />)}
+
+            <TimeTracking card={card} entries={time_entries} meId={me.id} run={run} readOnly={!canEdit} />
+
+            <CardDependencies card={card} boardCards={boardCards} run={run} readOnly={!canEdit} />
           </div>
 
           <aside className="modal-side">
