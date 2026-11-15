@@ -976,3 +976,18 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .new-sprint { margin-top: 16px; }
 .drawer section { margin-bottom: 20px; }
 .public-desc { white-space: pre-wrap; }
+
+/* ---------- Settings → Sign-in ---------- */
+.sso-provider { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+.copyable { user-select: all; word-break: break-all; }
+.modal.sso-dialog { width: min(460px, 100%); padding: 20px 24px 24px; gap: 14px; border-radius: 16px; }
+.sso-dialog-head { display: flex; align-items: center; justify-content: space-between; }
+.sso-dialog-head h3 { margin: 0; }
+.sso-dialog .field { font-size: 13px; font-weight: 500; }
+.sso-dialog .field input { font-size: 14px; padding: 10px 12px; }
+.sso-dialog .field .row input { flex: 1; min-width: 0; }
+.sso-dialog input.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.sso-dialog .check-field.big { font-size: 14px; font-weight: 400; color: var(--text); gap: 10px; }
+.sso-dialog .check-field.big input { width: 18px; height: 18px; accent-color: var(--accent); }
+.sso-dialog p { margin: -6px 0 0; }
+.sso-dialog-actions { justify-content: flex-end; gap: 8px; }
