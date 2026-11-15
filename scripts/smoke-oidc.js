@@ -132,6 +132,42 @@ try {
   await fetch(`${APP}/api/auth/oidc/settings`, { method: 'PUT', headers: admin, body: JSON.stringify({ ...saved, show: true }) });
   const shown = await fetch(`${APP}/api/auth/status`).then((r) => r.json());
   check(shown.oidc.enabled && shown.oidc.name === 'TinyAuth', 'button comes back with the new name');
+
+  /* ----- Linking existing accounts ----- */
+  const mk = (username) => fetch(`${APP}/api/users`, { method: 'POST', headers: admin, body: JSON.stringify({ username, password: 'password1234' }) }).then((r) => r.json());
+  const login = async (username) => (await fetch(`${APP}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password: 'password1234' }) }))
+    .headers.get('set-cookie').match(/rb_session=([^;]+)/)[1];
+  const flow = async (startPath, c) => {
+    const st = await fetch(`${APP}${startPath}`, { redirect: 'manual', headers: c ? { Cookie: `rb_session=${c}` } : {} });
+    const cb = (await fetch(st.headers.get('location'), { redirect: 'manual' })).headers.get('location');
+    return fetch(cb, { redirect: 'manual' });
+  };
+  const meAs = (c) => fetch(`${APP}/api/auth/me`, { headers: { Cookie: `rb_session=${c}` } }).then((r) => r.json());
+
+  // Self-link while rocky's identity is still on the admin account is refused.
+  await mk('bandit');
+  const bandit = await login('bandit');
+  const taken = await flow('/api/auth/oidc/start?link=1', bandit);
+  check(taken.headers.get('location').startsWith('/#/settings?sso_error='), 'linking an identity that belongs to someone else is refused');
+
+  // Admin unlinks rocky (the first account), then bandit links it to themselves.
+  check((await fetch(`${APP}/api/auth/me/oidc`, { method: 'DELETE', headers: admin })).status === 400, 'cannot unlink yourself without a password');
+  const rockyId = (await meAs(cookie)).id;
+  const banditId = (await meAs(bandit)).id;
+  const after = await fetch(`${APP}/api/users/${rockyId}`, { method: 'PATCH', headers: admin, body: JSON.stringify({ oidc_unlink: true }) }).then((r) => r.json());
+  check(after.oidc === false, 'admin can unlink a user');
+  const linked = await flow('/api/auth/oidc/start?link=1&return=/settings', bandit);
+  check(linked.headers.get('location') === '/#/settings?sso=linked' && (await meAs(bandit)).oidc, 'a user can link their own account');
+  const unl = await fetch(`${APP}/api/auth/me/oidc`, { method: 'DELETE', headers: { Cookie: `rb_session=${bandit}` } }).then((r) => r.json());
+  check(unl.oidc === false, 'a user with a password can unlink themselves');
+
+  // Admin pre-links bandit by the provider username; next SSO sign-in lands in bandit's account.
+  const pre = await fetch(`${APP}/api/users/${banditId}`, { method: 'PATCH', headers: admin, body: JSON.stringify({ oidc_link: 'Rocky' }) }).then((r) => r.json());
+  check(pre.oidc_pending === 'Rocky', 'admin can set a pending link');
+  const signin = await flow('/api/auth/oidc/start');
+  const c3 = (signin.headers.get('set-cookie') || '').match(/rb_session=([^;]+)/)?.[1];
+  const who = await meAs(c3);
+  check(who.username === 'bandit' && who.oidc && !who.oidc_pending, 'pending link applied on next sign-in');
   console.log('OIDC smoke test passed.');
 } finally {
   cleanup();

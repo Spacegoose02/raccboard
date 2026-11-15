@@ -161,12 +161,47 @@ function ProfileSettings() {
         <button className="btn" disabled={!pw.new_password} onClick={savePassword}>{user.has_password ? 'Change password' : 'Set password'}</button>
         {msg.password && <span className="muted small">{msg.password}</span>}
       </div>
+      <SsoLink user={user} />
+    </>
+  );
+}
+
+// Link or unlink your own single sign-on (e.g. TinyAuth) login.
+function SsoLink({ user }) {
+  const { oidc } = useAuth();
+  const hash = window.location.hash;
+  const back = new URLSearchParams(hash.split('?')[1] || '');
+  const [msg, setMsg] = useState(back.get('sso') === 'linked' ? 'Linked ✓' : back.get('sso_error') || '');
+  if (!oidc?.configured && !user.oidc) return null;
+  const name = oidc?.name || 'single sign-on';
+  const unlink = async () => {
+    if (!confirm(`Unlink ${name}? You'll sign in with your username and password.`)) return;
+    try { setCurrentUser(await api.del('/auth/me/oidc')); setMsg('Unlinked ✓'); } catch (e) { setMsg(e.message); }
+  };
+  return (
+    <>
+      <h4>Single sign-on</h4>
+      {user.oidc ? (
+        <div className="row wrap">
+          <span className="muted small">This account is linked to {name}.</span>
+          <button className="btn danger" onClick={unlink}>Unlink</button>
+        </div>
+      ) : IS_NATIVE ? (
+        <p className="muted small">Link {name} from Settings → Profile on the web.</p>
+      ) : (
+        <div className="row wrap">
+          <span className="muted small">Sign in with {name} once to link it to this account.</span>
+          <a className="btn" href={`/api/auth/oidc/start?link=1&return=${encodeURIComponent('/settings')}`}>Link {name} account</a>
+        </div>
+      )}
+      {msg && <p className={msg.includes('✓') ? 'muted small' : 'error small'}>{msg}</p>}
     </>
   );
 }
 
 function UsersSettings() {
-  const { user: me, users } = useAuth();
+  const { user: me, users, oidc } = useAuth();
+  const ssoName = oidc?.name || 'single sign-on';
   const empty = { username: '', display_name: '', password: '', role: 'user' };
   const [form, setForm] = useState(empty);
   const [msg, setMsg] = useState('');
@@ -189,10 +224,15 @@ function UsersSettings() {
             <div className="grow">
               <div><b>{u.display_name}</b></div>
               <div className="small">Signs in as <code>{u.username}</code></div>
-              <div className="muted small">{u.role}{u.oidc ? ' · single sign-on' : ''}{u.email ? ` · ${u.email}` : ''}</div>
+              <div className="muted small">{u.role}{u.oidc ? ' · single sign-on' : ''}{u.oidc_pending ? ` · links to "${u.oidc_pending}" on next sign-on` : ''}{u.email ? ` · ${u.email}` : ''}</div>
             </div>
             {u.id !== me.id && (
               <Menu items={[
+                !u.oidc && { label: u.oidc_pending ? 'Change single sign-on link' : 'Link single sign-on account', onClick: () => {
+                  const v = prompt(`Their ${ssoName} username or email. It links the first time they sign in with ${ssoName}.`, u.oidc_pending || '');
+                  if (v !== null) act(() => api.patch(`/users/${u.id}`, { oidc_link: v }), v.trim() ? `${u.display_name} will be linked on their next ${ssoName} sign-in ✓` : 'Link cancelled ✓');
+                } },
+                (u.oidc || u.oidc_pending) && { label: 'Unlink single sign-on', onClick: () => confirm(`Unlink ${u.display_name} from ${ssoName}?${u.has_password ? '' : ' They have no password, so reset it so they can still sign in.'}`) && act(() => api.patch(`/users/${u.id}`, { oidc_unlink: true, oidc_link: '' }), 'Unlinked ✓') },
                 { label: u.role === 'admin' ? 'Make regular user' : 'Make admin', onClick: () => act(() => api.patch(`/users/${u.id}`, { role: u.role === 'admin' ? 'user' : 'admin' })) },
                 { label: 'Change username', onClick: () => setRenameFor(u) },
                 { label: 'Reset password', onClick: () => setResetFor(u) },
@@ -395,7 +435,8 @@ function NewLabel({ onAdd }) {
 }
 
 function TeamsSettings() {
-  const { user: me, users } = useAuth();
+  const { user: me, users, oidc } = useAuth();
+  const ssoName = oidc?.name || 'single sign-on';
   const [teams, setTeams] = useState(null);
   const [name, setName] = useState('');
   const [msg, setMsg] = useState('');

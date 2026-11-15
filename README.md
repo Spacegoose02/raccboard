@@ -185,6 +185,10 @@ TINYAUTH_OIDC_CLIENTS_RACCBOARD_TRUSTEDREDIRECTURIS=https://kanban.example.com/a
 
 In Raccboard use issuer `https://auth.example.com` (your TinyAuth URL) and the same client ID and secret.
 
+**Linking existing accounts.** A user can link their own account in **Settings → Profile → Single sign-on → Link** (sign in with the
+provider once) and unlink it again if they have a password. An admin can, from **Settings → Users → ⋯**, set **Link single sign-on account**
+to the person's provider username or email (it links the first time they sign in with it) or **Unlink single sign-on**.
+
 The environment variables below still work; anything set in Settings wins.
 
 Works with Authentik, Authelia, Keycloak, Google, Microsoft and any other OpenID Connect provider. Create a confidential client with the redirect URI `https://<your-rackboard>/api/auth/oidc/callback`, then set:

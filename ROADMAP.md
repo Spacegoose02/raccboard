@@ -89,6 +89,7 @@
 ## v1.6.0
 
 - [x] Settings → Sign-in: add an OIDC sign-in provider (TinyAuth, Authelia, Authentik…) from the app, with discovery, extra scopes, auto-create and show-on-sign-in toggles
+- [x] Link existing accounts to single sign-on: users link/unlink their own; admins pre-link by provider username or email, or unlink
 
 ## Phase 2: Accounts and sharing
 

@@ -380,6 +380,10 @@ const migrations = [
   CREATE UNIQUE INDEX idx_boards_public_token ON boards(public_token) WHERE public_token IS NOT NULL;
   CREATE UNIQUE INDEX idx_boards_inbound_token ON boards(inbound_token) WHERE inbound_token IS NOT NULL;
   `,
+  // v19: admin-set single sign-on link (TinyAuth username, email or subject) applied on that person's next SSO sign-in
+  `
+  ALTER TABLE users ADD COLUMN oidc_link_hint TEXT;
+  `,
 ];
 
 function migrate() {

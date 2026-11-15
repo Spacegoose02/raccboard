@@ -73,6 +73,7 @@ export function publicUser(u, viewer) {
   return {
     id: u.id, username: u.username, display_name: u.display_name, email: showEmail ? u.email || '' : '',
     avatar: u.avatar || '', role: u.role, has_password: !!u.password_hash, oidc: !!u.oidc_sub,
+    ...(showEmail ? { oidc_pending: u.oidc_sub ? '' : u.oidc_link_hint || '' } : {}),
   };
 }
 
@@ -264,7 +265,7 @@ authRouter.get('/auth/status', (req, res) => {
     user: publicUser(req.user),
     signup: ALLOW_SIGNUP,
     forgot: emailConfigured(),
-    oidc: (({ enabled, show, name }) => ({ enabled: enabled && show, name }))(oidcSettings()),
+    oidc: (({ enabled, show, name }) => ({ enabled: enabled && show, configured: enabled, name }))(oidcSettings()),
   });
 });
 
@@ -346,6 +347,13 @@ const photoUpload = multer({
   fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp|gif)$/.test(file.mimetype)),
 });
 
+// Unlink your own single sign-on login. Needs a password so the account can still be signed in to.
+authRouter.delete('/auth/me/oidc', requireUser, (req, res) => {
+  if (!req.user.password_hash) fail(400, 'Set a password first, so you can still sign in after unlinking.');
+  db.prepare('UPDATE users SET oidc_issuer = NULL, oidc_sub = NULL, oidc_link_hint = NULL WHERE id = ?').run(req.user.id);
+  res.json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)));
+});
+
 authRouter.post('/auth/me/photo', requireUser, photoUpload.single('photo'), (req, res) => {
   if (!req.file) fail(400, 'Choose a PNG, JPEG, WebP or GIF image');
   removePhoto(req.user.avatar);
@@ -389,6 +397,16 @@ authRouter.patch('/users/:id', requireAdmin, async (req, res) => {
   if ('username' in req.body) {
     const name = newUsername(req.body.username, u);
     if (name) db.prepare('UPDATE users SET username = ? WHERE id = ?').run(name, u.id);
+  }
+  if (req.body.oidc_unlink) {
+    db.prepare('UPDATE users SET oidc_issuer = NULL, oidc_sub = NULL, oidc_link_hint = NULL WHERE id = ?').run(u.id);
+  }
+  if ('oidc_link' in req.body) {
+    // The TinyAuth username, email or subject ID; linked the first time that person signs in with single sign-on.
+    const hint = String(req.body.oidc_link || '').trim().slice(0, 200) || null;
+    if (hint && u.oidc_sub && !req.body.oidc_unlink) fail(400, 'This user is already linked. Unlink them first.');
+    if (hint && db.prepare('SELECT 1 FROM users WHERE id != ? AND lower(oidc_link_hint) = lower(?)').get(u.id, hint)) fail(400, 'Another user is already waiting to be linked to that account');
+    db.prepare('UPDATE users SET oidc_link_hint = ? WHERE id = ?').run(hint, u.id);
   }
   if (req.body.password) {
     checkPassword(req.body.password);
@@ -510,7 +528,9 @@ authRouter.get('/auth/oidc/start', async (req, res) => {
   const ret = String(req.query.return || '/');
   for (const [k, v] of pending) if (v.expires < Date.now()) pending.delete(k);
   if (pending.size > 1000) fail(429, 'Too many sign-ins in progress. Try again in a few minutes.');
-  pending.set(state, { verifier, returnTo: ret.startsWith('/') && !ret.startsWith('//') && !ret.includes('\\') ? ret : '/', expires: Date.now() + 10 * 60e3 });
+  // ?link=1 from Settings → Profile: attach this sign-in to the account that is signed in now.
+  const linkUserId = req.query.link === '1' ? (req.user || fail(401, 'Sign in first')).id : null;
+  pending.set(state, { verifier, linkUserId, returnTo: ret.startsWith('/') && !ret.startsWith('//') && !ret.includes('\\') ? ret : '/', expires: Date.now() + 10 * 60e3 });
   const url = oidc.buildAuthorizationUrl(config, {
     redirect_uri: redirectUri(req),
     scope: [...BASE_SCOPES, ...s.extraScopes].join(' '),
@@ -536,6 +556,20 @@ authRouter.get('/auth/oidc/callback', async (req, res) => {
     const issuer = config.serverMetadata().issuer;
     let user = db.prepare('SELECT * FROM users WHERE oidc_issuer = ? AND oidc_sub = ?').get(issuer, claims.sub);
     const email = typeof claims.email === 'string' ? claims.email : null;
+    const link = (u) => db.prepare('UPDATE users SET oidc_issuer = ?, oidc_sub = ?, oidc_link_hint = NULL WHERE id = ?').run(issuer, claims.sub, u.id);
+    if (p.linkUserId) {
+      // Linking from Settings → Profile.
+      if (user && user.id !== p.linkUserId) throw new Error(`That ${s.name} account is already linked to @${user.username}. Ask an admin to unlink it first.`);
+      const me = db.prepare('SELECT * FROM users WHERE id = ?').get(p.linkUserId) || fail(404, 'User not found');
+      link(me);
+      return res.redirect('/#/settings?sso=linked');
+    }
+    if (!user) {
+      // An admin linked this person ahead of time (Settings → Users → Link single sign-on).
+      const keys = [claims.sub, claims.preferred_username, email].filter((x) => typeof x === 'string' && x).map((x) => x.toLowerCase());
+      user = db.prepare(`SELECT * FROM users WHERE oidc_sub IS NULL AND lower(oidc_link_hint) IN (${keys.map(() => '?').join(',')})`).get(...keys);
+      if (user) link(user);
+    }
     if (!user && email && claims.email_verified === true && flag('OIDC_LINK_BY_EMAIL', true)) {
       // Link an existing local account that has the same verified email.
       user = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE AND oidc_sub IS NULL').get(email);
@@ -553,6 +587,7 @@ authRouter.get('/auth/oidc/callback', async (req, res) => {
     res.redirect(`/#${p.returnTo}`);
   } catch (e) {
     console.error('OIDC sign-in failed:', e.message);
+    if (p.linkUserId) return res.redirect('/#/settings?sso_error=' + encodeURIComponent(e.message || 'Linking failed'));
     res.redirect('/#/login?error=' + encodeURIComponent(e.message || 'Sign-in failed'));
   }
 });
