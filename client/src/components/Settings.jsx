@@ -10,6 +10,7 @@ import { loadUsers, setCurrentUser, signOut, useAuth } from '../auth.js';
 import { SharePanel } from './Share.jsx';
 import CalendarSettings from './CalendarSettings.jsx';
 import EmailSettings from './EmailSettings.jsx';
+import SignInSettings from './SignInSettings.jsx';
 import BackupSettings from './BackupSettings.jsx';
 import IntegrationSettings from './IntegrationSettings.jsx';
 
@@ -19,6 +20,7 @@ const SECTIONS = [
   { id: 'users', label: 'Users', admin: true },
   { id: 'teams', label: 'Teams & families' },
   { id: 'calendar', label: 'Calendar' },
+  { id: 'signin', label: 'Sign-in', admin: true },
   { id: 'email', label: 'Email', admin: true },
   { id: 'backups', label: 'Backups', admin: true },
   { id: 'integrations', label: 'API & webhooks' },
@@ -50,6 +52,7 @@ export default function Settings({ boardId }) {
           {user?.role === 'admin' && <section className="panel" ref={section('users')}><UsersSettings /></section>}
           <section className="panel" ref={section('teams')}><TeamsSettings /></section>
           <section className="panel" ref={section('calendar')}><CalendarSettings /></section>
+          {user?.role === 'admin' && <section className="panel" ref={section('signin')}><SignInSettings /></section>}
           {user?.role === 'admin' && <section className="panel" ref={section('email')}><EmailSettings /></section>}
           {user?.role === 'admin' && <section className="panel" ref={section('backups')}><BackupSettings /></section>}
           <section className="panel" ref={section('integrations')}><IntegrationSettings /></section>

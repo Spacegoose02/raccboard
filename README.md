@@ -169,6 +169,24 @@ Boards created before accounts existed belong to the first admin.
 
 ### Single sign-on (OIDC)
 
+Admins can add a sign-in provider in **Settings → Sign-in → Add sign-in provider**: the button name, issuer URL, client ID and secret,
+optional extra scopes (`openid profile email` are always requested), whether first sign-in creates an account, and whether the button
+shows on the sign-in page. Raccboard reads the rest from `<issuer>/.well-known/openid-configuration` and checks it when you save.
+The dialog shows the **redirect URL** to register with the provider (`PUBLIC_URL` + `/api/auth/oidc/callback`).
+
+**TinyAuth example.** Create a client in TinyAuth, then add Raccboard's redirect URL to it, for example:
+
+```
+TINYAUTH_OIDC_CLIENTS_RACCBOARD_CLIENTID=<client id>
+TINYAUTH_OIDC_CLIENTS_RACCBOARD_CLIENTSECRET=<client secret>
+TINYAUTH_OIDC_CLIENTS_RACCBOARD_NAME=Raccboard
+TINYAUTH_OIDC_CLIENTS_RACCBOARD_TRUSTEDREDIRECTURIS=https://kanban.example.com/api/auth/oidc/callback
+```
+
+In Raccboard use issuer `https://auth.example.com` (your TinyAuth URL) and the same client ID and secret.
+
+The environment variables below still work; anything set in Settings wins.
+
 Works with Authentik, Authelia, Keycloak, Google, Microsoft and any other OpenID Connect provider. Create a confidential client with the redirect URI `https://<your-rackboard>/api/auth/oidc/callback`, then set:
 
 | Variable             | Purpose |
@@ -178,7 +196,7 @@ Works with Authentik, Authelia, Keycloak, Google, Microsoft and any other OpenID
 | `OIDC_CLIENT_SECRET` | Client secret (leave empty for a public PKCE client) |
 | `OIDC_NAME`          | Button label, e.g. `Authentik` (default "Single sign-on") |
 | `OIDC_REDIRECT_URI`  | Override the callback URL (default `PUBLIC_URL` + `/api/auth/oidc/callback`, or the request's host) |
-| `OIDC_SCOPES`        | Default `openid profile email` |
+| `OIDC_SCOPES`        | Extra scopes; `openid profile email` are always requested |
 | `OIDC_AUTO_CREATE`   | `true` (default): first sign-in creates an account. `false`: only already-linked accounts can sign in |
 | `OIDC_LINK_BY_EMAIL` | `true` (default): link to an existing local account that has the same **verified** email |
 

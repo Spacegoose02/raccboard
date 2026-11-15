@@ -192,20 +192,50 @@ setInterval(purgeExpired, 60 * 60e3).unref();
 
 /* ---------- OIDC ---------- */
 
-const OIDC_ISSUER = env('OIDC_ISSUER');
-const OIDC_ENABLED = !!(OIDC_ISSUER && env('OIDC_CLIENT_ID'));
-const OIDC_NAME = env('OIDC_NAME', 'Single sign-on');
+// The sign-in provider comes from Settings → Sign-in (stored in app_settings as oidc_*);
+// the OIDC_* environment variables fill in anything not set there.
+const BASE_SCOPES = ['openid', 'profile', 'email'];
+const OIDC_KEYS = ['name', 'issuer', 'client_id', 'client_secret', 'scopes', 'auto_create', 'show'];
 let oidcConfig = null;
+let oidcConfigKey = '';
 const pending = new Map(); // state -> { verifier, returnTo, expires }
 
-async function getOidc() {
-  if (!oidcConfig) {
-    const secret = env('OIDC_CLIENT_SECRET');
-    oidcConfig = await oidc.discovery(
-      new URL(OIDC_ISSUER), env('OIDC_CLIENT_ID'), secret || undefined,
-      secret ? oidc.ClientSecretPost(secret) : oidc.None(),
-      OIDC_ISSUER.startsWith('http:') ? { execute: [oidc.allowInsecureRequests] } : undefined,
-    );
+const truthy = (v) => ['true', '1', 'yes'].includes(String(v).trim().toLowerCase());
+
+export function oidcSettings() {
+  const stored = Object.fromEntries(db.prepare("SELECT key, value FROM app_settings WHERE key LIKE 'oidc\\_%' ESCAPE '\\'").all()
+    .map((r) => [r.key.slice(5), r.value]));
+  const pick = (k, envKey, d = '') => (stored[k] ?? env(envKey, d)).trim();
+  const issuer = pick('issuer', 'OIDC_ISSUER');
+  const clientId = pick('client_id', 'OIDC_CLIENT_ID');
+  // Extra scopes are added to openid/profile/email, which are always requested.
+  const extra = pick('scopes', 'OIDC_SCOPES').split(/[\s,]+/).filter((x) => x && !BASE_SCOPES.includes(x));
+  return {
+    name: pick('name', 'OIDC_NAME') || 'Single sign-on',
+    issuer,
+    clientId,
+    clientSecret: pick('client_secret', 'OIDC_CLIENT_SECRET'),
+    extraScopes: [...new Set(extra)],
+    autoCreate: stored.auto_create != null ? truthy(stored.auto_create) : flag('OIDC_AUTO_CREATE', true),
+    show: stored.show != null ? truthy(stored.show) : true,
+    enabled: !!(issuer && clientId),
+  };
+}
+
+async function getOidc(s = oidcSettings()) {
+  const key = JSON.stringify([s.issuer, s.clientId, s.clientSecret]);
+  if (!oidcConfig || key !== oidcConfigKey) {
+    const opts = s.issuer.startsWith('http:') ? { execute: [oidc.allowInsecureRequests] } : undefined;
+    const issuerUrl = new URL(s.issuer);
+    let config = await oidc.discovery(issuerUrl, s.clientId, s.clientSecret || undefined, s.clientSecret ? oidc.ClientSecretPost(s.clientSecret) : oidc.None(), opts);
+    // Use client_secret_basic when the provider only lists that (TinyAuth, Authelia and most others accept both).
+    const methods = config.serverMetadata().token_endpoint_auth_methods_supported;
+    if (s.clientSecret && Array.isArray(methods) && !methods.includes('client_secret_post') && methods.includes('client_secret_basic')) {
+      config = new oidc.Configuration(config.serverMetadata(), s.clientId, s.clientSecret, oidc.ClientSecretBasic(s.clientSecret));
+      if (opts) oidc.allowInsecureRequests(config);
+    }
+    oidcConfig = config;
+    oidcConfigKey = key;
   }
   return oidcConfig;
 }
@@ -234,7 +264,7 @@ authRouter.get('/auth/status', (req, res) => {
     user: publicUser(req.user),
     signup: ALLOW_SIGNUP,
     forgot: emailConfigured(),
-    oidc: { enabled: OIDC_ENABLED, name: OIDC_NAME },
+    oidc: (({ enabled, show, name }) => ({ enabled: enabled && show, name }))(oidcSettings()),
   });
 });
 
@@ -423,9 +453,58 @@ authRouter.post('/auth/reset', async (req, res) => {
 
 /* ----- OIDC (authorization code + PKCE) ----- */
 
+// Admin: Settings → Sign-in. The secret is never sent back; an empty one keeps the saved value.
+function publicOidc(req) {
+  const s = oidcSettings();
+  return {
+    name: s.name, issuer: s.issuer, client_id: s.clientId, has_secret: !!s.clientSecret,
+    scopes: s.extraScopes.join(' '), auto_create: s.autoCreate, show: s.show, enabled: s.enabled,
+    redirect_uri: redirectUri(req),
+  };
+}
+authRouter.get('/auth/oidc/settings', requireAdmin, (req, res) => res.json(publicOidc(req)));
+
+authRouter.put('/auth/oidc/settings', requireAdmin, async (req, res) => {
+  const b = req.body || {};
+  const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
+  const issuer = str(b.issuer).replace(/\/\.well-known\/openid-configuration\/?$/, '');
+  if (issuer && !/^https?:\/\/[^\s]+$/i.test(issuer)) fail(400, 'Issuer URL must start with https:// (or http:// for testing)');
+  if (issuer && !str(b.client_id)) fail(400, 'Client ID is required');
+  const values = {
+    name: str(b.name, 60) || 'Single sign-on',
+    issuer,
+    client_id: str(b.client_id),
+    scopes: str(b.scopes).split(/[\s,]+/).filter((x) => x && !BASE_SCOPES.includes(x)).join(' '),
+    auto_create: b.auto_create ? 'true' : 'false',
+    show: b.show === false ? 'false' : 'true',
+  };
+  if (str(b.client_secret)) values.client_secret = str(b.client_secret, 1000);
+  if (b.clear_secret) values.client_secret = '';
+  if (issuer) {
+    // Check discovery before saving so a typo shows up here, not on the sign-in page.
+    try {
+      await oidc.discovery(new URL(issuer), values.client_id, undefined, oidc.None(), issuer.startsWith('http:') ? { execute: [oidc.allowInsecureRequests] } : undefined);
+    } catch (e) {
+      fail(400, `Couldn't read ${issuer}/.well-known/openid-configuration: ${e.message}`);
+    }
+  }
+  const upsert = db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
+  db.transaction(() => { for (const [k, v] of Object.entries(values)) upsert.run(`oidc_${k}`, v); })();
+  oidcConfig = null;
+  res.json(publicOidc(req));
+});
+
+// Remove the provider (environment variables, if any, apply again).
+authRouter.delete('/auth/oidc/settings', requireAdmin, (req, res) => {
+  db.prepare("DELETE FROM app_settings WHERE key LIKE 'oidc\\_%' ESCAPE '\\'").run();
+  oidcConfig = null;
+  res.json(publicOidc(req));
+});
+
 authRouter.get('/auth/oidc/start', async (req, res) => {
-  if (!OIDC_ENABLED) fail(404, 'Single sign-on is not configured');
-  const config = await getOidc();
+  const s = oidcSettings();
+  if (!s.enabled) fail(404, 'Single sign-on is not configured');
+  const config = await getOidc(s);
   const verifier = oidc.randomPKCECodeVerifier();
   const state = oidc.randomState();
   const ret = String(req.query.return || '/');
@@ -434,7 +513,7 @@ authRouter.get('/auth/oidc/start', async (req, res) => {
   pending.set(state, { verifier, returnTo: ret.startsWith('/') && !ret.startsWith('//') && !ret.includes('\\') ? ret : '/', expires: Date.now() + 10 * 60e3 });
   const url = oidc.buildAuthorizationUrl(config, {
     redirect_uri: redirectUri(req),
-    scope: env('OIDC_SCOPES', 'openid profile email'),
+    scope: [...BASE_SCOPES, ...s.extraScopes].join(' '),
     code_challenge: await oidc.calculatePKCECodeChallenge(verifier),
     code_challenge_method: 'S256',
     state,
@@ -443,12 +522,13 @@ authRouter.get('/auth/oidc/start', async (req, res) => {
 });
 
 authRouter.get('/auth/oidc/callback', async (req, res) => {
-  if (!OIDC_ENABLED) fail(404, 'Single sign-on is not configured');
+  const s = oidcSettings();
+  if (!s.enabled) fail(404, 'Single sign-on is not configured');
   const p = pending.get(String(req.query.state || ''));
   if (!p || p.expires < Date.now()) return res.redirect('/#/login?error=' + encodeURIComponent('Sign-in expired, please try again'));
   pending.delete(String(req.query.state));
   try {
-    const config = await getOidc();
+    const config = await getOidc(s);
     const current = new URL(redirectUri(req));
     current.search = new URLSearchParams(req.query).toString();
     const tokens = await oidc.authorizationCodeGrant(config, current, { pkceCodeVerifier: p.verifier, expectedState: req.query.state });
@@ -462,7 +542,7 @@ authRouter.get('/auth/oidc/callback', async (req, res) => {
       if (user) db.prepare('UPDATE users SET oidc_issuer = ?, oidc_sub = ? WHERE id = ?').run(issuer, claims.sub, user.id);
     }
     if (!user) {
-      if (!flag('OIDC_AUTO_CREATE', true)) throw new Error('No account is linked to this sign-in. Ask an admin to create one.');
+      if (!s.autoCreate) throw new Error('No account is linked to this sign-in. Ask an admin to create one.');
       user = await createUser({
         username: await uniqueUsername(claims.preferred_username || email?.split('@')[0] || claims.sub),
         display_name: cleanName(claims.name || claims.preferred_username, 'New user'),

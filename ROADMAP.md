@@ -86,6 +86,10 @@
 
 - [x] Fix: card detail on phones no longer turns see-through below the first screen (Checklist, Time, Dependencies); Time and Dependencies now sit under the Checklist
 
+## v1.6.0
+
+- [x] Settings → Sign-in: add an OIDC sign-in provider (TinyAuth, Authelia, Authentik…) from the app, with discovery, extra scopes, auto-create and show-on-sign-in toggles
+
 ## Phase 2: Accounts and sharing
 
 - [x] @mentions in comments, notifications inbox (bell), due-date reminders, optional email
